@@ -1,11 +1,6 @@
   out_port(forward_out, RequestMsg, forwardToCache);
-
   out_port(response_out, ResponseMsg, responseToCache);
-  out_port(request_out_order, RequestMsg, requestToOrder);
   out_port(memQueue_out, MemoryMsg, requestToMemory);
-
-  out_port(response_out_bus, ResponseMsg, responseToBusOnly);
-  
 
   in_port(memQueue_in, MemoryMsg, responseFromMemory) {
       if (memQueue_in.isReady(clockEdge())) {
@@ -55,8 +50,6 @@
 
   in_port(response_in, ResponseMsg, responseFromCache) {
         if (response_in.isReady(clockEdge())) {
-            // could be for InvAck, which does not participate in the arbitration
-            // assert(!splitBus);
             peek(response_in, ResponseMsg) {
                 Entry e := getCacheEntry(in_msg.addr);
                 TBE tbe := TBEs[in_msg.addr];
@@ -88,48 +81,6 @@
         }
   }
 
-  in_port(response_bus_in, ResponseMsg, responseFromBusOnly) {
-        if (response_bus_in.isReady(clockEdge())) {
-            assert(splitBus);
-            peek(response_bus_in, ResponseMsg) {
-                Entry e := getCacheEntry(in_msg.addr);
-                TBE tbe := TBEs[in_msg.addr];
-                TBE wb_tbe := WB_TBEs[in_msg.addr];
-                if(is_valid(wb_tbe)) {
-                    DPRINTF(RubySlicc, "addr = %x, wb_tbe = %p (Outstanding MemAck: %d), %s\n", in_msg.addr, wb_tbe, wb_tbe.MemAckOutstanding, wb_tbe.TBEState);
-                } else if(is_valid(tbe)) {
-                    DPRINTF(RubySlicc, "addr = %x, tbe = %p (Outstanding MemAck: %d)\n", in_msg.addr, tbe);
-                }
-                if(is_valid(tbe) && is_valid(wb_tbe)) {
-                    error("Impossible: both tbe and wb_tbe are valid");
-                }
-                if (in_msg.Type == CoherenceResponseType:Data) {
-                    if(is_valid(wb_tbe)) {
-                        trigger(Event:Data, in_msg.addr, e, wb_tbe);
-                    } else {
-                        trigger(Event:Data, in_msg.addr, e, tbe);
-                    }
-                } else if(in_msg.Type == CoherenceResponseType:InvAck) {
-                    if(is_valid(wb_tbe)) {
-                        trigger(Event:InvAck, in_msg.addr, e, wb_tbe);
-                    } else {
-                        trigger(Event:InvAck, in_msg.addr, e, tbe);
-                    }
-                } else {
-                    error("Unexpected message type.");
-                }
-            }
-        }
-  }
-
-  in_port(request_in_order, RequestMsg, requestFromOrdered) {
-      if(request_in_order.isReady(clockEdge())) {
-          peek(request_in_order, RequestMsg) {
-              assert(false); // dead code
-          }
-      }
-  }
-
   in_port(request_in, RequestMsg, requestFromCache) {
       if (request_in.isReady(clockEdge())) {
           peek(request_in, RequestMsg) {
@@ -152,13 +103,9 @@
               }
               if(is_valid(tbe) && is_valid(wb_tbe)) {
                 DPRINTF(RubySlicc, "An entry is in both TBE and WB_TBE\n");
-              }
-              // if it is not the first request sending the request, throw it to ordering
-              // FIXME: fix the ordering thing
-              if( ((!in_msg.is_reordered && TBEs.cnt() == 0 && (bus.getROCCount(in_msg.SetIdx) > 0) && !isZCLLC()) || (TBEs.cnt() > 0 && !(is_valid(tbe) && tbe.addr == in_msg.addr && tbe.req == in_msg.Requestor))) && (in_msg.Type == CoherenceRequestType:GetS || in_msg.Type == CoherenceRequestType:GetM)) {
-                  // Requesting on a cache line that needs to be ordered
-                  trigger(Event:Order, in_msg.addr, e, tbe);
-              } else if(in_msg.Type == CoherenceRequestType:GetS || in_msg.Type == CoherenceRequestType:GetM) {
+                              }
+
+              if(in_msg.Type == CoherenceRequestType:GetS || in_msg.Type == CoherenceRequestType:GetM) {
                   assert(xyzCacheMemory.vi_enabled() == false || xyzCacheMemory.calculateVIwithDelta(0, 0, sum_prv_capacity)); 
                   DPRINTF(RubySlicc, "Hitting a GetM or GetS\n");
                   DPRINTF(RubySlicc, "is_invalid(e): %d\n", is_invalid(e));

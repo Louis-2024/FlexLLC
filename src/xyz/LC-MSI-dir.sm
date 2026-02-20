@@ -12,38 +12,27 @@ machine(MachineType:Directory, "Directory protocol")
   Cycles responseBusLatency := 1;
   int sum_prv_cores := 0;
   int sum_prv_capacity := 0;
-  bool enforce_roc := 1;
+  bool enforce_roc := 0;
   int wb_buffer_size := 0;
   bool delayMarkDone := 0;
 
-MessageBuffer *forwardToCache, network = "To", virtual_network = "1",
-                               vnet_type = "forward";
-MessageBuffer *responseToCache, network = "To", virtual_network = "2",
-                                vnet_type = "response";
-MessageBuffer *requestFromCache, network = "From", virtual_network = "0",
-                                 vnet_type = "request";
-// These channels are not used if we enable split bus                            
-// vnet 2 is dedicated to cache-to-cache transfer when split-bus is enabled
-MessageBuffer *responseFromCache, network = "From", virtual_network = "2",
-                                  vnet_type = "response";
-// NOTE: peek from requestFromOrdered should only be processed if the request CAN be processed...
-// NOTE: the request sent to requestToOrder will be ordered in the PerfectTDMSwitch and will be serviced back later
-// NOTE: all memory request should be ordered even in the case of ZIV + ROC because a later reqeust can 
-// Occupy a CRE
-MessageBuffer *requestToOrder, network = "To", virtual_network = "3",
-                                  vnet_type = "request";
-MessageBuffer *requestFromOrdered, network = "From", virtual_network = "3",
-                                  vnet_type = "request";
-// used only in split bus                            
+MessageBuffer *forwardToCache, network = "To", virtual_network = "1", vnet_type = "forward";
+MessageBuffer *responseToCache, network = "To", virtual_network = "2", vnet_type = "response";
+MessageBuffer *requestFromCache, network = "From", virtual_network = "0", vnet_type = "request";
+MessageBuffer *responseFromCache, network = "From", virtual_network = "2", vnet_type = "response";
+
+// We don't need these channels for FlexLLC...
 bool splitBus;
+MessageBuffer *requestToOrder, network = "To", virtual_network = "3", vnet_type = "request";
+MessageBuffer *requestFromOrdered, network = "From", virtual_network = "3", vnet_type = "request";                           
 MessageBuffer * responseToBusOnly, network="To", virtual_network="6", vnet_type="response";
 MessageBuffer * responseFromBusOnly, network="From", virtual_network="6", vnet_type="response";
+// ... but deleting them causes errors
 
 MessageBuffer *requestToMemory;
 MessageBuffer *responseFromMemory;
 {
-  state_declaration(State, desc="Directory states",
-                  default="Directory_State_I") {
+  state_declaration(State, desc="Directory states", default="Directory_State_I") {
       // Stable states.
       // NOTE: These are "cache-centric" states like in Sorin et al.
       // However, The access permissions are memory-centric.
@@ -78,7 +67,6 @@ MessageBuffer *responseFromMemory;
         GetS,         desc="Request for read-only data from cache";
         GetM,         desc="Request for read-write data from cache";
         Replacement,  desc="Triggered when block is chosen as victim";
-        ReplacementReorder,  desc="Triggered when block is chosen as victim";
 
         // Writeback requests from the cache
         PutSNotLast,  desc="PutS and the block has other sharers";
@@ -101,9 +89,6 @@ MessageBuffer *responseFromMemory;
         MemAck,       desc="Ack from memory that write is complete";
         LastMemAck,       desc="Ack from memory that write is complete";
 
-        // Ordering
-        Order,        desc="Order what every request";
-        Unblock,      desc="Unblock something";
     }
 
 
@@ -290,12 +275,8 @@ MessageBuffer *responseFromMemory;
   action(markLLCDone, "mLD", desc="Mark LLC Done") {
     bus.markLLCDone();
   }
-  action(markLLCDone_WaitForDataIfNonSplit, "mLDD", desc="Mark LLC Done") {
-    if(splitBus) {
-        bus.markLLCDone();
-    } else {
-        bus.markLLCDone(true);
-    }
+  action(markLLCDone_WaitForData, "mLDD", desc="Mark LLC Done") {
+      bus.markLLCDone(true);
   }
 
   action(markTransactionDone, "mTD", desc="Mark a transaction as done") {
@@ -306,30 +287,13 @@ MessageBuffer *responseFromMemory;
     delayMarkDone := true;
   }
 
-  action(markLLCDoneIfSplitBus, "mLDSb", desc="Mark LLC Done if this is split bus transaction") {
-    if(splitBus) {
-        bus.markLLCDone();
-    }
-  }
-
-  action(markLLCDoneIfNonDelayAndNonSplit, "mdindans", desc="") {
-    if(!splitBus && !delayMarkDone) {
+  action(markLLCDoneIfNonDelay, "mdindans", desc="") {
+    if(!delayMarkDone) {
         bus.markLLCDone();
     }
   }
   action(clearPutSDelayMarkDone, "mclrmd", desc="") {
     delayMarkDone := false;
-  }
-  
-  action(markLLCDoneIfNotSplitBusWithData, "mLDSbd", desc="Mark LLC Done if this is split bus transaction") {
-    if(!splitBus) {
-        bus.markLLCDone(true);
-    }
-  }
-  action(markLLCDoneIfNotSplitBus, "mLDnSb", desc="Mark LLC Done if this is split bus transaction") {
-    if(!splitBus) {
-        bus.markLLCDone();
-    }
   }
 
   action(recReplShared, 'rRS', desc="Record shared replacement") {
@@ -340,40 +304,6 @@ MessageBuffer *responseFromMemory;
   }
   action(recReplLLC, 'rRL', desc="Record LLC replacement") {
     xyzStatsObject.recordReplLLC();
-  }
-
-
-  action(allocteROCTBE, 'aTBE', desc="Allocate tbe entry for RoC for current pending request") {
-    peek(request_in, RequestMsg) {
-        if(enforce_roc) {
-            assert(TBEs.cnt() == 0);
-            DPRINTF(RubySlicc, "TBE cnt when inserting... %d, inserting %x\n", TBEs.cnt(), in_msg.addr);
-            if(TBEs.cnt() == 0) {
-                TBEs.allocate(in_msg.addr);
-                TBE tbe := TBEs[in_msg.addr];
-                tbe.req := in_msg.Requestor;
-                tbe.addr := in_msg.addr;
-                assert(TBEs.cnt() == 1);
-            }
-        }
-    }
-  }
-
-
-  action(deallocateROCTBE, 'cTBE', desc="Allocate tbe entry for RoC for current pending request") {
-      // clearing the flag
-      // only used in non-vi based
-      // if(is_valid(tbe)) {
-        // assert(is_valid(tbe));
-        // TBEs.deallocate(address);
-        if(enforce_roc) {
-        if(TBEs.cnt() >= 1) {
-        assert(TBEs.cnt() == 1);
-        TBEs.clr();
-        }
-        }
-        // unset_tbe();
-      // }
   }
 
   // -------------------------
@@ -422,44 +352,6 @@ MessageBuffer *responseFromMemory;
   }
   // -------------------------
 
-  action(guardSplitBus, "isSB", desc="Guard that this transition only happens in a split bus setup") {
-    assert(splitBus);
-  }
-  action(guardNoROC, "isROC", desc="") {
-    assert(!enforce_roc);
-  }
-
-  action(fwdToOrderFromReq, "fwdOrd", desc="Send a request so that there is a Ack later to unblock the cache") {
-      // Not necessarily valid cache_entry, e.g. I,GEtM after a Replacement trigger by another core
-      // assert(is_valid(cache_entry));
-      peek(request_in, RequestMsg) {
-        enqueue(request_out_order, RequestMsg) {
-            // the original request causing the replacement is blocking on the input
-            // the replacement order
-            // out_msg.addr := address;
-            // nothing...
-            // out_msg.Type := CoherenceRequestType:Inv;
-            // out_msg.MessageSize := MessageSizeType:Request_Control;
-            out_msg := in_msg;
-        }
-    }
-  }
-
-    action(fwdToOrderFromReorder, "fwdReord", desc="Send a request so that there is a Ack later to unblock the cache") {
-      assert(is_valid(cache_entry));
-      peek(request_in_order, RequestMsg) {
-        enqueue(request_out_order, RequestMsg) {
-            // the original request causing the replacement is blocking on the input
-            // the replacement order
-            // out_msg.addr := address;
-            // nothing...
-            // out_msg.Type := CoherenceRequestType:Inv;
-            // out_msg.MessageSize := MessageSizeType:Request_Control;
-            out_msg := in_msg;
-        }
-    }
-  }
-
   action(sendMemRead, "r", desc="Send a memory read request") {
         peek(request_in, RequestMsg) {
             // Send request through special memory request queue. At some
@@ -506,31 +398,16 @@ MessageBuffer *responseFromMemory;
     }
     // PMSI* fix only for write back from 
     action(sendRespDataToMem, "rw", desc="Write data to memory from resp") {
-        if(splitBus) {
-            peek(response_bus_in, ResponseMsg) {
-                DPRINTF(RubySlicc, "Writing memory for %#x\n", address);
-                DPRINTF(RubySlicc, "Writing %s\n", in_msg.DataBlk);
-                enqueue(memQueue_out, MemoryMsg, toMemLatency) {
-                    out_msg.addr := address;
-                    out_msg.Type := MemoryRequestType:MEMORY_WB;
-                    out_msg.Sender := in_msg.Sender;
-                    out_msg.MessageSize := MessageSizeType:Writeback_Data;
-                    out_msg.DataBlk := in_msg.DataBlk;
-                    out_msg.Len := 0;
-                }
-            }
-        } else {
-            peek(response_in, ResponseMsg) {
-                DPRINTF(RubySlicc, "Writing memory for %#x\n", address);
-                DPRINTF(RubySlicc, "Writing %s\n", in_msg.DataBlk);
-                enqueue(memQueue_out, MemoryMsg, toMemLatency) {
-                    out_msg.addr := address;
-                    out_msg.Type := MemoryRequestType:MEMORY_WB;
-                    out_msg.Sender := in_msg.Sender;
-                    out_msg.MessageSize := MessageSizeType:Writeback_Data;
-                    out_msg.DataBlk := in_msg.DataBlk;
-                    out_msg.Len := 0;
-                }
+        peek(response_in, ResponseMsg) {
+            DPRINTF(RubySlicc, "Writing memory for %#x\n", address);
+            DPRINTF(RubySlicc, "Writing %s\n", in_msg.DataBlk);
+            enqueue(memQueue_out, MemoryMsg, toMemLatency) {
+                out_msg.addr := address;
+                out_msg.Type := MemoryRequestType:MEMORY_WB;
+                out_msg.Sender := in_msg.Sender;
+                out_msg.MessageSize := MessageSizeType:Writeback_Data;
+                out_msg.DataBlk := in_msg.DataBlk;
+                out_msg.Len := 0;
             }
         }
     }
@@ -657,44 +534,24 @@ MessageBuffer *responseFromMemory;
   }
   action(sendDataToReq, "d", desc="Send data from memory to requestor. May need to send sharer number, too") {
       peek(memQueue_in, MemoryMsg) {
-          if(splitBus) {
-            enqueue(response_out_bus, ResponseMsg, responseBusLatency) {
-                out_msg.addr := address;
-                out_msg.Type := CoherenceResponseType:Data;
-                out_msg.Sender := machineID;
-                out_msg.Destination.add(in_msg.OriginalRequestorMachId);
-                out_msg.DataBlk := in_msg.DataBlk;
-                out_msg.MessageSize := MessageSizeType:Data;
-                out_msg.OriginalRequestor := in_msg.OriginalRequestorMachId;
-                // Entry e := getDirectoryEntry(address);
-                // Only need to include acks if we are the owner.
-                if (cache_entry.Owner.isElement(in_msg.OriginalRequestorMachId)) {
-                    out_msg.Acks := cache_entry.Sharers.count();
-                } else {
-                    out_msg.Acks := 0;
-                }
-                assert(out_msg.Acks >= 0);
-            }
-          } else {
-            enqueue(response_out, ResponseMsg, responseBusLatency) {
-                // assert(false);  // FIXME: the responseBusLatency could lead the response to go out of slot
-                out_msg.addr := address;
-                out_msg.Type := CoherenceResponseType:Data;
-                out_msg.Sender := machineID;
-                out_msg.Destination.add(in_msg.OriginalRequestorMachId);
-                out_msg.DataBlk := in_msg.DataBlk;
-                out_msg.MessageSize := MessageSizeType:Data;
-                out_msg.OriginalRequestor := in_msg.OriginalRequestorMachId;
-                // Entry e := getDirectoryEntry(address);
-                // Only need to include acks if we are the owner.
-                if (cache_entry.Owner.isElement(in_msg.OriginalRequestorMachId)) {
-                    out_msg.Acks := cache_entry.Sharers.count();
-                } else {
-                    out_msg.Acks := 0;
-                }
-                assert(out_msg.Acks >= 0);
-            }
-          }
+          enqueue(response_out, ResponseMsg, responseBusLatency) {
+              // assert(false);  // FIXME: the responseBusLatency could lead the response to go out of slot
+              out_msg.addr := address;
+              out_msg.Type := CoherenceResponseType:Data;
+              out_msg.Sender := machineID;
+              out_msg.Destination.add(in_msg.OriginalRequestorMachId);
+              out_msg.DataBlk := in_msg.DataBlk;
+              out_msg.MessageSize := MessageSizeType:Data;
+              out_msg.OriginalRequestor := in_msg.OriginalRequestorMachId;
+              // Entry e := getDirectoryEntry(address);
+              // Only need to include acks if we are the owner.
+              if (cache_entry.Owner.isElement(in_msg.OriginalRequestorMachId)) {
+                  out_msg.Acks := cache_entry.Sharers.count();
+              } else {
+                  out_msg.Acks := 0;
+              }
+              assert(out_msg.Acks >= 0);
+          } 
       }
   }
 
@@ -713,19 +570,11 @@ MessageBuffer *responseFromMemory;
     response_in.dequeue(clockEdge());
   }
   action(popDataResponseQueue, "pRb", desc="Pop the response queue") {
-    if(splitBus) {
-        response_bus_in.dequeue(clockEdge());
-    } else {
-        response_in.dequeue(clockEdge());
-    }
+      response_in.dequeue(clockEdge());
   }
 
   action(popRequestQueue, "pQ", desc="Pop the request queue") {
       request_in.dequeue(clockEdge());
-  }
-
-  action(popReorderRequestQueue, "pRQ", desc="Pop the request queue") {
-      request_in_order.dequeue(clockEdge());
   }
 
   action(popMemQueue, "pM", desc="Pop the memory queue") {
@@ -802,30 +651,6 @@ MessageBuffer *responseFromMemory;
 
   action(sendLLCToReq, "creq", desc="Copy data from LLC to resp") {
       assert(is_valid(cache_entry));
-      if(splitBus) {
-        peek(request_in, RequestMsg) {
-            enqueue(response_out_bus, ResponseMsg, responseBusLatency) {
-                out_msg.addr := address;
-                out_msg.Type := CoherenceResponseType:Data;
-                out_msg.Sender := machineID;
-                out_msg.Destination.add(in_msg.Requestor);
-                out_msg.DataBlk := cache_entry.DataBlk;
-                out_msg.MessageSize := MessageSizeType:Response_Data;
-                out_msg.OriginalRequestor := in_msg.Requestor;
-                // Only need to include acks if we are the owner.
-                if (cache_entry.Owner.isElement(in_msg.Requestor)) {
-                    out_msg.Acks := cache_entry.Sharers.count();
-                } else {
-                    out_msg.Acks := 0;
-                }
-                xyzCacheMemory.setMRU(cache_entry);
-
-            DPRINTF(RubySlicc, "sendLLCToReq: final %s entry to send (addr? %#x)\n", cache_entry.DataBlk, address);
-            DPRINTF(RubySlicc, "sendLLCToReq: final out_msg.DataBlk %s entry to send (addr? %#x)\n", out_msg.DataBlk, address);
-            DPRINTF(RubySlicc, "sendLLCToReq: final out_msg %s (%#x) entry to send (addr? %#x)\n", out_msg, out_msg, address);
-            }
-        }
-      } else {
         peek(request_in, RequestMsg) {
             enqueue(response_out, ResponseMsg, responseBusLatency) {
                 out_msg.addr := address;
@@ -848,10 +673,6 @@ MessageBuffer *responseFromMemory;
             DPRINTF(RubySlicc, "sendLLCToReq: final out_msg %s (%#x) entry to send (addr? %#x)\n", out_msg, out_msg, address);
             }
         }
-      }
-  }
-  action(notnow, "nnn", desc="not now!") {
-        assert(false);
   }
 
   action(stall_request_in, "sri", desc="stall request in") {
@@ -883,66 +704,6 @@ MessageBuffer *responseFromMemory;
   action(guardInWBTBE, "gOIW", desc="Invariant that ensures that stable states will only reside in cache and not TBE") {
     assert(is_valid(tbe));
   }
-
-
-  /* action(wakeupAndRetryRequest, 'wrt', desc="Wakeup and retry") {
-      
-  } */
-
-  // Back-invalidations, should not exist for other stuff
-  // The following cases cannot be handled within a slot
-  
-  // Can be only on...
-  transition(LLC_Only_dirty, Replacement, LLC_Only_dirty_m) {
-    nozcllcguard;
-    recReplLLC;
-      // allocteROCTBE;
-
-      incrementCacheEntryMemAckCount;
-      allocateWBTBE;
-      migrateCacheToWBCBE; 
-      
-
-      sendLLCDataToMem;
-      fwdToOrderFromReq;
-      popRequestQueue;
-
-      markLLCDoneIfSplitBus;
-
-      markCRE;
-  }
-
-  transition(LLC_Only_dirty_m, {Replacement, ReplacementReorder}) {
-      guardSplitBus;
-      fwdToOrderFromReq;
-      popRequestQueue;
-
-      markLLCDoneIfSplitBus;
-      // stall;
-  }
-  // try again...
-  transition({LLC_Only_dirty, LLC_Only_clean, I, S, M, S_m, LLC_Only_dirty_m, M_m, II_m, II_dm}, Order) {
-      fwdToOrderFromReq;
-      popRequestQueue;
-      
-      markLLCDone;
-  }
-
-  transition(II_m, {GetS,GetM}) {
-    guardSplitBus;
-    guardNoROC;
-    fwdToOrderFromReq;
-    popRequestQueue;
-    markLLCDone;
-  }
-
-  transition({MI_m}, Order) {
-    guardSplitBus;
-      fwdToOrderFromReq;
-      popRequestQueue;
-      
-      markLLCDoneIfSplitBus;
-  }
   
   transition(LLC_Only_dirty, Sync, LLC_Only_dirty_m) {
       guardOnlyInCache;
@@ -960,37 +721,31 @@ MessageBuffer *responseFromMemory;
   }
   
   transition({LLC_Only_clean, LLC_Only_dirty}, GetS, S) {
-    deallocateROCTBE;
     addReqToSharers
     xyzAddToSharers;
     sendLLCToReq;
     popRequestQueue;
 
-    markLLCDone_WaitForDataIfNonSplit;
+    markLLCDone_WaitForData;
   }
 
   transition({LLC_Only_clean, LLC_Only_dirty}, GetM, M) {
     guardOnlyInCache;
 
-    deallocateROCTBE;
     setOwner;
     xyzSetOwner;
     sendLLCToReq;
     popRequestQueue;
     
-    markLLCDone_WaitForDataIfNonSplit;
+    markLLCDone_WaitForData;
   }
   
-  // allocateROCTBE only used when doing replacement and request has to be ordered
   transition(I, GetS, S_m) {
-      deallocateROCTBE;
       allocateCacheBlock;
       sendMemRead;
       addReqToSharers;
       xyzAddToSharers;
       popRequestQueue;
-
-      markLLCDoneIfSplitBus;
   }
 
   transition(I, {PutSNotLast, PutSLast_clean, PutSLast_dirty, PutMNonOwner}) {
@@ -1005,18 +760,15 @@ MessageBuffer *responseFromMemory;
       popMemQueue;
 
       // markLLCDone;
-      markLLCDoneIfNotSplitBusWithData;
+      markLLCDone_WaitForData;
   }
 
   transition(I, GetM, M_m) {
-      deallocateROCTBE;
       allocateCacheBlock;
       sendMemRead;
       setOwner;
       xyzSetOwner;
       popRequestQueue;
-
-      markLLCDoneIfSplitBus
   }
 
   transition(M_m, MemData, M) {
@@ -1025,20 +777,18 @@ MessageBuffer *responseFromMemory;
       popMemQueue;
 
       // markLLCDone;
-      markLLCDoneIfNotSplitBusWithData;
+      markLLCDone_WaitForData;
   }
 
   transition(S, GetS) {
-      // deallocateROCTBE;
       sendLLCToReq;
       addReqToSharers;
       xyzAddToSharers;
       popRequestQueue;
 
-      markLLCDone_WaitForDataIfNonSplit;
+      markLLCDone_WaitForData;
   }
   transition(S, GetM, M) {
-      // deallocateROCTBE;
       removeReqFromSharers;
       sendInvToSharers;
       setOwner;
@@ -1047,7 +797,7 @@ MessageBuffer *responseFromMemory;
       clearSharers;
       popRequestQueue;
 
-      markLLCDone_WaitForDataIfNonSplit;
+      markLLCDone_WaitForData;
   }
 
     transition({LLC_Only_dirty, LLC_Only_dirty_m}, PutMNonOwner) {
@@ -1064,8 +814,7 @@ MessageBuffer *responseFromMemory;
       sendPutAck;
       popRequestQueue;
 
-      markLLCDoneIfSplitBus;
-      markLLCDoneIfNonDelayAndNonSplit;
+      markLLCDoneIfNonDelay;
   }
   transition({S, S_D, SS_m, S_m}, PutMNonOwner) {
       xyzRemoveFromSharers;
@@ -1080,8 +829,7 @@ MessageBuffer *responseFromMemory;
       sendPutAck;
       popRequestQueue;
 
-      markLLCDoneIfSplitBus;
-      markLLCDoneIfNonDelayAndNonSplit;
+      markLLCDoneIfNonDelay;
   }
   
   transition(S, PutSLast_clean, LLC_Only_clean) {
@@ -1120,8 +868,6 @@ MessageBuffer *responseFromMemory;
       sendPutAck;
       popRequestQueue;
 
-      markLLCDoneIfSplitBus;
-
       markCRE;
   }
 
@@ -1136,36 +882,9 @@ MessageBuffer *responseFromMemory;
     popMemQueue;
     kd_wakeUpDependents;
 
-    markLLCDoneIfNotSplitBus;
+    markLLCDone;
     clearPutSDelayMarkDone;
-  }
-  transition(LLC_Only_dirty_m, MemAck) {
-    guardSplitBus;
-
-    decrementCacheEntryMemAckCountIfValid;
-    decrementTBEMemAckCount;
-
-    popMemQueue;
-    kd_wakeUpDependents;
-
-  }
-  
-  // This transition is still needed, and should mark the slot end
-  // PMSI* fix
-  // transition(M, GetS, S_D) {
-  //     // notnow;
-  //     // not needed actually? may needed
-  //     // deallocateROCTBE;
-  //     sendFwdGetS;
-  //     addReqToSharers;
-  //     // not updating the vacancy invariant
-  //     addOwnerToSharers;
-  //     xyzAddToSharers
-  //     clearOwner;
-  //     popRequestQueue;
-
-  //     markLLCDoneIfSplitBus;
-  // }
+  }  
 
   // as if this is GetM according to PMSI*, so no S_D state needed
   transition(M, GetS) {
@@ -1179,7 +898,6 @@ MessageBuffer *responseFromMemory;
   }
 
   transition(M, GetM) {
-      // deallocateROCTBE;
       sendFwdGetM;
       clearOwner;
       setOwner;
@@ -1199,15 +917,11 @@ MessageBuffer *responseFromMemory;
 
     recReplShared;
     // nozivguard;
-    //allocteROCTBE;
-    fwdToOrderFromReq;
+
     sendInvs;
     sendLLCDataToMem;
     clearSharers;
     popRequestQueue;
-
-    // TODO: is this correct?
-    markLLCDoneIfSplitBus;
   }
   // InvAck is fine b/c it won't go through the split bus
   transition({II_m, I}, InvAck) {
@@ -1223,13 +937,9 @@ MessageBuffer *responseFromMemory;
     allocateWBTBE;
     migrateCacheToWBCBE;  
 
-    //allocteROCTBE;
-    fwdToOrderFromReq;
     sendFwdGetMInv;
     clearOwner;
     popRequestQueue;
-    
-    markLLCDoneIfSplitBus;
   }
   transition(II_dm, Data, II_m) {
     // nozivguard;
@@ -1255,7 +965,7 @@ MessageBuffer *responseFromMemory;
 
     popMemQueue;
     // markLLCDone;
-    markLLCDoneIfNotSplitBus;
+    markLLCDone;
   }
 
   // Interesting but useless state?
@@ -1263,21 +973,12 @@ MessageBuffer *responseFromMemory;
     decrementTBEMemAckCount;
     popMemQueue;
   }
-  // maybe try again
-  transition({II_dm, II_m}, Replacement) {
-    guardSplitBus;
-    fwdToOrderFromReq;
-    popRequestQueue;
-
-    markLLCDoneIfSplitBus;
-  }
 
   transition({M, M_m, MI_m}, {PutSNotLast, PutSLast_clean, PutSLast_dirty, PutSNotLastNonSharer}) {
       sendPutAck;
       popRequestQueue;
 
-      markLLCDoneIfSplitBus;
-      markLLCDoneIfNonDelayAndNonSplit;
+      markLLCDoneIfNonDelay;
   }
 
     transition({M, M_m, MI_m}, PutMNonOwner) {
@@ -1313,8 +1014,6 @@ MessageBuffer *responseFromMemory;
       sendPutAck;
       popRequestQueue;
 
-      markLLCDoneIfSplitBus;
-
       markCRE;
   }
 
@@ -1326,57 +1025,16 @@ MessageBuffer *responseFromMemory;
       popMemQueue;
 
       // markLLCDone;
-      markLLCDoneIfNotSplitBus;
+      markLLCDone;
   }
 
   transition(MI_m, LastMemAck, LLC_Only_clean) {
       decrementCacheEntryMemAckCountIfValid;
       // since we don't need WB anymore, no need to decrement
       deallocateWBTBE;
-      markLLCDoneIfNotSplitBus;
+      markLLCDone;
 
       popMemQueue;
-  }
-
-  transition({S, M}, LastMemAck) {
-    guardSplitBus;
-    guardOnlyInCache;
-
-    // may have been deallocated already?
-    decrementCacheEntryMemAckCount;
-
-    popMemQueue;
-  }
-
-  transition({S, M}, MemAck) {
-    guardSplitBus;
-    guardOnlyInCache;
-
-    // may have been deallocated already?
-    decrementCacheEntryMemAckCount;
-
-    popMemQueue;
-  }
-
-  transition({LLC_Only_clean, LLC_Only_dirty}, LastMemAck) {
-    guardSplitBus;
-    guardOnlyInCache;
-    
-     // may have been deallocated already?
-    decrementCacheEntryMemAckCount;
-
-    popMemQueue;   
-  }
-
-  // transition(S_D, {GetS, GetM, Replacement}) {
-  //     stall;
-  // }
-  transition(S_D, Order) {
-      guardSplitBus;
-      fwdToOrderFromReq;
-      popRequestQueue;
-      
-      markLLCDone;
   }
 
   transition(S_D, {PutSLast_dirty, PutSLast_clean}) {
@@ -1392,7 +1050,7 @@ MessageBuffer *responseFromMemory;
       popDataResponseQueue;
 
       // markLLCDone;
-      markLLCDoneIfNotSplitBus;
+      markLLCDone;
   }
   /*
   // should be within same slot as the GetS
@@ -1403,113 +1061,6 @@ MessageBuffer *responseFromMemory;
   transition(LLC_Only_dirty_m, Sync) {
       // stall;
       stall_request_in;
-  }
-
-  // If we get another request for a block that's waiting on memory,
-  // stall that request.
-  // transition({SS_m, S_m, M_m}, {GetS, GetM, Replacement}) {
-  //     // should only happens when we split the bus
-  //     guardSplitBus;
-  //     stall;
-  //     // stall_request_in;
-  // }
-  transition({SS_m, S_m}, {Replacement}) {
-      // should only happens when we split the bus
-      guardSplitBus;
-      stall;
-      // stall_request_in;
-  }
-  transition({M_m, S_m}, {GetM, GetS}) {
-      // should only happens when we split the bus
-      guardSplitBus;
-      fwdToOrderFromReq;
-      popRequestQueue;
-
-      markLLCDoneIfSplitBus;
-      // stall_request_in;
-  }
-
-  // FIXME: hotfix for uses only in gp + splitbus configuration
-  transition(II_dm, {GetS, GetM}) {
-      // should only happens when we split the bus
-      guardSplitBus;
-      fwdToOrderFromReq;
-      popRequestQueue;
-
-      markLLCDoneIfSplitBus;
-      // stall_request_in;
-  }
-
-  transition(LLC_Only_dirty_m, GetM, M) {
-    guardSplitBus;
-    guardInWBTBE;
-
-    allocateCacheBlockIfNotPresent;
-    migrateWBTBEToCache;
-
-    deallocateROCTBE;
-    setOwner;
-    xyzSetOwner;
-    sendLLCToReq;
-    popRequestQueue;
-
-    deallocateWBTBE;
-
-    markLLCDone;
-  }
-
-  transition(LLC_Only_dirty_m, GetS, S) {
-    guardSplitBus;
-    guardInWBTBE;
-
-    allocateCacheBlockIfNotPresent;
-    migrateWBTBEToCache;
-
-    deallocateROCTBE;
-    addReqToSharers
-    xyzAddToSharers;
-    sendLLCToReq;
-    popRequestQueue;
-
-
-    deallocateWBTBE;
-    
-    markLLCDone;
-  }
-
-  transition(MI_m, GetM, M) {
-    guardSplitBus;
-    guardInWBTBE;
-
-    allocateCacheBlockIfNotPresent;
-    migrateWBTBEToCache;
-
-    deallocateROCTBE;
-    setOwner;
-    xyzSetOwner;
-    sendLLCToReq;
-    popRequestQueue;
-
-    deallocateWBTBE;
-    
-    markLLCDone;
-  }
-  transition(MI_m, GetS, S) {
-    guardSplitBus;
-    guardInWBTBE;
-
-    allocateCacheBlockIfNotPresent;
-    migrateWBTBEToCache;
-
-      deallocateROCTBE;
-    addReqToSharers
-    xyzAddToSharers;
-    sendLLCToReq;
-    popRequestQueue;
-
-    deallocateWBTBE;
-
-    markLLCDone;
   }
 
 }
