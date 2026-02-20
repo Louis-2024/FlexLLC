@@ -44,11 +44,8 @@ MessageBuffer *responseFromMemory;
     // structures
 
     structure(TBE, desc="MSHR like requests", main="false") {
-        Addr addr;
-        MachineID req;
         State TBEState,         desc="State of block";
         DataBlock DataBlk,      desc="Data for the block. Needed for MI_A";
-        int AcksOutstanding,    default=0, desc="Number of acks left to receive.";
         int MemAckOutstanding,  desc="Number of outstanding Acks from the main memory";
     }
 
@@ -57,7 +54,6 @@ MessageBuffer *responseFromMemory;
         NetDest Sharers,        desc="Sharers for this block";
         NetDest Owner,          desc="Owner of this block";
         DataBlock DataBlk,      desc="Data in the block";
-        bool isDirty,           desc="Specify whether we really need to perform memory transaction";
         int MemAckOutstanding,  desc="Number of outstanding Acks from the main memory";
     }
 
@@ -70,8 +66,6 @@ MessageBuffer *responseFromMemory;
         void clr();
     }
     TBETable TBEs, template="<Directory_TBE>", constructor="m_number_of_TBEs";
-    TBETable WB_TBEs, template="<Directory_TBE>", constructor="m_wb_buffer_size";
-    
     Tick clockEdge();
 
     // functions 
@@ -104,7 +98,6 @@ MessageBuffer *responseFromMemory;
     }
     
     State getState(TBE tbe, Entry cache_entry, Addr addr) {
-        DPRINTF(RubySlicc, "Getting state for... %#x %p\n", addr, cache_entry);
         if(is_valid(tbe)) {
             return tbe.TBEState;
         } else if(is_valid(cache_entry)) {

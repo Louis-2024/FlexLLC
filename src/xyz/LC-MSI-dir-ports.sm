@@ -7,7 +7,6 @@
             peek(memQueue_in, MemoryMsg) {
                 Entry e := getCacheEntry(in_msg.addr);
                 TBE tbe := TBEs[in_msg.addr];
-                TBE wb_tbe := WB_TBEs[in_msg.addr];
 
                 // add events
 
@@ -31,7 +30,6 @@
             peek(response_in, ResponseMsg) {
                 Entry e := getCacheEntry(in_msg.addr);
                 TBE tbe := TBEs[in_msg.addr];
-                TBE wb_tbe := WB_TBEs[in_msg.addr];
                 
                 // add events
 
@@ -55,7 +53,6 @@
             peek(request_in, RequestMsg) {
                 Entry e := getCacheEntry(in_msg.addr);
                 TBE tbe := TBEs[in_msg.addr];
-                TBE wb_tbe := WB_TBEs[in_msg.addr];
 
                 // add events
 
