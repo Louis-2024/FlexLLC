@@ -385,7 +385,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     // The same as the read callback above.
     DPRINTF(RubySlicc, "%#x: before cache_entry.DataBlk: %s\n", address, cache_entry.DataBlk);
     sequencer.writeCallback(address, cache_entry.DataBlk, false);
-    xyzCacheMemory.markDirty(address);
     DPRINTF(RubySlicc, "%#x: after cache_entry.DataBlk: %s\n", address, cache_entry.DataBlk);
 }
 
@@ -397,7 +396,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
           sequencer.writeCallback(address, cache_entry.DataBlk, true,
                                 // Note: this could be the last ack.
                                 machineIDToMachineType(in_msg.Sender));
-          xyzCacheMemory.markDirty(address);
           DPRINTF(RubySlicc, "%#x: after cache_entry.DataBlk: %s\n", address, cache_entry.DataBlk);
       }
   }
