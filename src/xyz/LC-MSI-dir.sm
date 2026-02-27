@@ -1,16 +1,14 @@
 machine(MachineType:Directory, "Directory protocol"):
-  DirectoryMemory * directory;
-  CacheMemory * cacheMemory;
-  XYZCacheMemory *xyzCacheMemory;
-  XYZStatsObject *xyzStatsObject;
-  TDMSwitch* bus;
-  Cycles toMemLatency := 1;
-  Cycles responseBusLatency := 1;
-  int sum_prv_cores := 0;
-  int sum_prv_capacity := 0;
-  bool enforce_roc := 0;
-  int wb_buffer_size := 0;
-  bool delayMarkDone := 0;
+    XYZCacheMemory *xyzCacheMemory;
+    XYZStatsObject *xyzStatsObject;
+    TDMSwitch* bus;
+    Cycles toMemLatency := 1;
+    Cycles responseBusLatency := 1;
+    int sum_prv_cores := 0;
+    int sum_prv_capacity := 0;
+    bool enforce_roc := 0;
+    int wb_buffer_size := 0;
+    bool delayMarkDone := 0;
 
 MessageBuffer *forwardToCache, network = "To", virtual_network = "1", vnet_type = "forward";
 MessageBuffer *responseToCache, network = "To", virtual_network = "2", vnet_type = "response";
@@ -29,16 +27,34 @@ MessageBuffer *requestToMemory;
 MessageBuffer *responseFromMemory;
 {
     state_declaration(State, desc="Directory states", default="Directory_State_I") {
-        // add states
-        M, AccessPermission:Invalid,     desc="";
-        S, AccessPermission:Read_Only,   desc="";
-        I, AccessPermission:Read_Write,  desc="";
+        // stable states
+        M, AccessPermission:Invalid, desc="";
+        S, AccessPermission:Read_Only, desc="";
+        I, AccessPermission:Read_Write, desc="";
+        LOC, AccessPermission:Read_Write, desc="LLC_Only_Clean";
+        LOD, AccessPermission:Read_Write, desc="LLC_Only_Dirty";
+
+        // transient states
+        I_to_S_await_data, AccessPermission:Busy, desc="";
+        I_to_M_await_data, AccessPermission:Busy, desc="";
+        LOD_to_LOC_await_ack, AccessPermission:Busy, desc="";
     }
 
     enumeration(Event, desc="Directory events") {
-        // add events
-        GetS,       desc="";
-        GetM,       desc="";
+        GetS, desc="";
+        GetM, desc="";
+
+        PutS_NotLastCopy, desc="";
+        PutS_LastCopy_Clean, desc="";
+        PutS_LastCopy_Dirty, desc="";
+        PutS_LastCopy_Dirty_WT, desc="";
+        PutM, desc="";
+        PutM_WT, desc="";
+        PutLOD, desc="";
+
+        MemData, desc="";
+        MemAck, desc="";
+        LastMemAck, desc="";
     }
 
     // structures
@@ -69,14 +85,6 @@ MessageBuffer *responseFromMemory;
     Tick clockEdge();
 
     // functions 
-
-    Entry getDirectoryEntry(Addr addr), return_by_pointer = "yes" {
-        Entry dir_entry := static_cast(Entry, "pointer", directory[addr]);
-        if (is_invalid(dir_entry)) {
-            dir_entry := static_cast(Entry, "pointer", directory.allocate(addr, new Entry));
-        }
-        return dir_entry;
-    }
     
     Entry getCacheEntry(Addr addr), return_by_pointer = "yes" {
         return static_cast(Entry, "pointer", xyzCacheMemory.lookup(addr));
@@ -89,13 +97,7 @@ MessageBuffer *responseFromMemory;
     Tick cyclesToTicks(Cycles c);
     Cycles curCycle();
     Cycles ticksToCycles(Tick t);
-    void wakeUpBuffers(Addr a);
     void wakeUpAllBuffers();
-    int getCurSlotOwnerHelper(Cycles c, int slot_width, int nCore);
-    int getCurSlotOwner() {
-        int owner := getCurSlotOwnerHelper(curCycle(), 128, 4);
-        return owner;
-    }
     
     State getState(TBE tbe, Entry cache_entry, Addr addr) {
         if(is_valid(tbe)) {
@@ -157,10 +159,325 @@ MessageBuffer *responseFromMemory;
 
     include "LC-MSI-dir-ports.sm";
 
+    // actions
 
-    // add actions
+    action(markLLCDone, desc="") {
+        bus.markLLCDone();
+    }
 
+    action(markLLCDone_await_data, desc="") {
+        bus.markLLCDone(true);
+    }
 
-    // add transitions
+    action(markLLCDone_if_not_delayed, desc="") {
+        if(!delayMarkDone) {
+            bus.markLLCDone();
+        }
+    }
+
+    action(setDelayMarkDone, desc="") {
+        delayMarkDone := true;
+    }
+
+    action(unsetDelayMarkDone, desc="") {
+        delayMarkDone := false;
+    }
+
+    action(incrementCacheEntryMemAckCount, desc="") {
+        cache_entry.MemAckOutstanding := cache_entry.MemAckOutstanding + 1;
+    }
+
+    action(decrementCacheEntryMemAckCount, desc="") {
+        cache_entry.MemAckOutstanding := cache_entry.MemAckOutstanding - 1;
+    }
+
+    action(sendMemRead, desc="Send a memory read request") {
+        peek(request_in, RequestMsg) {
+            enqueue(memQueue_out, MemoryMsg, toMemLatency) {
+                out_msg.addr := address;
+                out_msg.Type := MemoryRequestType:MEMORY_READ;
+                out_msg.Sender := in_msg.Requestor;
+                out_msg.MessageSize := MessageSizeType:Request_Control;
+                out_msg.Len := 0;
+            }
+        }
+    }
+
+    action(sendDataToMem, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(memQueue_out, MemoryMsg, toMemLatency) {
+                out_msg.addr := address;
+                out_msg.Type := MemoryRequestType:MEMORY_WB;
+                out_msg.Sender := in_msg.Requestor;
+                out_msg.MessageSize := MessageSizeType:Writeback_Data;
+                out_msg.DataBlk := in_msg.DataBlk;
+                out_msg.Len := 0;
+            }
+        }
+    }
+
+    action(sendLLCDataToMem, desc="") {
+        enqueue(memQueue_out, MemoryMsg, toMemLatency) {
+            out_msg.addr := address;
+            out_msg.Type := MemoryRequestType:MEMORY_WB;
+            out_msg.Sender := machineID;
+            out_msg.MessageSize := MessageSizeType:Writeback_Data;
+            out_msg.DataBlk := cache_entry.DataBlk;
+            out_msg.Len := 0;
+        }
+    }
+
+    action(xyzAddSharer, desc="") {
+        peek(request_in, RequestMsg) {
+            sum_prv_cores := sum_prv_cores + 1;
+            cache_entry.Sharers.add(in_msg.Requestor);
+
+            /* Todo: add sharer in XYZ*/
+
+        }
+    }
+
+    action(xyzRemoveSharer, desc="") {
+        peek(request_in, RequestMsg) {
+            cache_entry.Sharers.remove(in_msg.Requestor);
+            sum_prv_cores := sum_prv_cores - 1;
+
+            /* Todo: remove sharer in XYZ */
+
+        }
+    }
+
+    action(xyzClearSharers, desc="") {
+        sum_prv_cores := sum_prv_cores - cache_entry.Sharers.count();
+        
+        /* Todo: clear sharer in XYZ */
+
+    }
+
+    action(xyzClearAllHolders, desc="") {
+        sum_prv_cores := 0;
+        
+        /* Todo: clear sharer in XYZ */
+
+    }
+
+    action(xyzSetOwner, desc="") {
+        peek(request_in, RequestMsg) {
+            sum_prv_cores := sum_prv_cores - cache_entry.Sharers.count() + 1;
+            cache_entry.Owner.add(in_msg.Requestor);
+
+            /* Todo: set owner in XYZ */
+
+        }
+    }
+
+    action(xyzUnsetOwner, desc="") {
+        sum_prv_cores := sum_prv_cores - 1;
+        cache_entry.Owner.clear();
+
+        /* Todo: clear owner in XYZ */
+
+    }
+
+    action(sendInvToHolders, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(forward_out, RequestMsg, 1) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceRequestType:Inv;
+                out_msg.Requestor := in_msg.Requestor;
+                out_msg.Destination := cache_entry.Sharers;
+                out_msg.MessageSize := MessageSizeType:Control;
+            }
+        }
+    }
+
+    action(sendFwdGetM, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(forward_out, RequestMsg, 1) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceRequestType:GetM;
+                out_msg.Requestor := in_msg.Requestor;
+                out_msg.Destination := cache_entry.Owner;
+                out_msg.MessageSize := MessageSizeType:Control;
+            }
+        }
+    }
+
+    action(sendDataToReq, desc="") {
+        peek(memQueue_in, MemoryMsg) {
+            enqueue(response_out, ResponseMsg, responseBusLatency) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceResponseType:Data;
+                out_msg.Sender := machineID;
+                out_msg.Destination.add(in_msg.OriginalRequestorMachId);
+                out_msg.DataBlk := in_msg.DataBlk;
+                out_msg.MessageSize := MessageSizeType:Data;
+                out_msg.OriginalRequestor := in_msg.OriginalRequestorMachId;
+                if (cache_entry.Owner.isElement(in_msg.OriginalRequestorMachId)) {
+                    out_msg.Acks := cache_entry.Sharers.count();
+                } else {
+                    out_msg.Acks := 0;
+                }
+            }
+        }
+    }
+
+    action(sendPutAck, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(forward_out, RequestMsg, 1) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceRequestType:PutAck;
+                out_msg.Requestor := machineID;
+                out_msg.Destination.add(in_msg.Requestor);
+                out_msg.MessageSize := MessageSizeType:Control;
+            }
+        }
+    }
+
+    action(popRequestQueue, desc="") {
+        request_in.dequeue(clockEdge());
+    }
+
+    action(popMemQueue, "pM", desc="Pop the memory queue") {
+        memQueue_in.dequeue(clockEdge());
+    }
+
+    action(allocateCacheBlock, desc="") {
+        /* XYZ code might need updates */
+        set_cache_entry(xyzCacheMemory.allocate(address, new Entry));
+    }
+
+    action(deallocateCacheBlock, "dC", desc="Deallocate a cache block") {
+        /* XYZ code might need updates */
+        xyzCacheMemory.deallocate(address);
+        unset_cache_entry();
+    }
+
+    action(writeMemDataToLLC, desc="") {
+        peek(memQueue_in, MemoryMsg) {
+            cache_entry.DataBlk := in_msg.DataBlk;
+        }
+    }
+
+    action(writePrivateCacheDataToLLC, desc="") {
+        peek(request_in, RequestMsg) {      
+            cache_entry.DataBlk := in_msg.DataBlk;
+        }
+    }
+
+    action(sendLLCDataToReq, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(response_out, ResponseMsg, responseBusLatency) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceResponseType:Data;
+                out_msg.Sender := machineID;
+                out_msg.Destination.add(in_msg.Requestor);
+                out_msg.DataBlk := cache_entry.DataBlk;
+                out_msg.MessageSize := MessageSizeType:Response_Data;
+                out_msg.OriginalRequestor := in_msg.Requestor;
+                if (cache_entry.Owner.isElement(in_msg.Requestor)) {
+                    out_msg.Acks := cache_entry.Sharers.count();
+                } else {
+                    out_msg.Acks := 0;
+                }
+                xyzCacheMemory.setMRU(cache_entry);
+            }
+        }
+    }
+
+    action(wakeUpBuffers, desc="") {
+        wakeUpAllBuffers();
+    }
+
+    // transitions
+
+    transition(LOD, PutLOD, LOD_to_LOC_await_ack) {
+        incrementCacheEntryMemAckCount;
+        sendLLCDataToMem;
+        setDelayMarkDone;
+    }
+
+    transition({LOC, LOD}, GetS, S) {
+        xyzAddSharer;
+        sendDataToReq;
+        popRequestQueue;
+        markLLCDone_await_data;
+    }
+
+    transition({LOC, LOD}, GetM, M) {
+        xyzSetOwner;
+        sendLLCToReq;
+        popRequestQueue;
+        markLLCDone_await_data;
+    }
+
+    transition(I, GetS, I_to_S_await_data) {
+        allocateCacheBlock;
+        sendMemRead;
+        xyzAddSharer;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    transition(I_to_S_await_data, MemData, S) {
+        sendDataToReq;
+        writeMemDataToLLC;
+        popMemQueue;
+        markLLCDone;
+    }
+
+    transition(I_to_M_await_data, MemData, M) {
+        sendDataToReq;
+        writeMemDataToLLC;
+        popMemQueue;
+        markLLCDone;
+    }
+
+    transition(S, GetS) {
+        sendDataToReq;
+        xyzAddSharer;
+        popRequestQueue;
+        markLLCDone_await_data;
+    }
+
+    transition(S, GetM, M) {
+        xyzClearAllHolders;
+        sendInvToHolders;
+        xyzSetOwner;
+        sendDataToReq;
+        popRequestQueue;
+        markLLCDone_await_data;
+    }
+
+    transition(S, PutS_NotLastCopy) {
+        xyzRemoveSharer;
+        sendPutAck;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    transition(S, PutS_LastCopy_Clean, LOC) {
+        xyzRemoveSharer;
+        sendPutAck;
+        popRequestQueue;
+        markLLCDone; // To do: double check correctness
+    }
+
+    transition(S, PutS_LastCopy_Dirty, LLC_Only_dirty) {
+        xyzRemoveSharer;
+        sendPutAck;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    transition(S, PutS_LastCopy_Dirty_WT, LOD_to_LOC_await_ack) {
+        sendLLCDataToMem;
+        xyzRemoveSharer;
+        sendPutAck;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    
   
 }
