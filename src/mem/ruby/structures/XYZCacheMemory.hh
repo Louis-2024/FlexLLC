@@ -67,7 +67,7 @@ public:
         }
     }
 
-    void clearSharer(Addr address, bool inclusive) {
+    void clearSharers(Addr address, bool inclusive) {
         int64_t set_index = addressToCacheSet(address);
         bool is_present_in_LLC_directory = LLC_directory[set_index].metadata_per_set.find(address) != LLC_directory[set_index].metadata_per_set.end();
         bool is_present_in_NI_directory = NI_directory[set_index].metadata_per_set.find(address) != NI_directory[set_index].metadata_per_set.end();
@@ -113,6 +113,19 @@ public:
             LLC_directory[set_index].metadata_per_set[address].owner = -1;
         } else {
             assert((!is_present_in_LLC_directory) && is_present_in_NI_directory);
+            NI_directory[set_index].metadata_per_set[address].owner = -1;
+        }
+    }
+
+    void convertOwnerToSharer(Addr address, bool inclusive) {
+        int64_t set_index = addressToCacheSet(address);
+        if (inclusive) {
+            assert((!is_present_in_NI_directory) && is_present_in_LLC_directory);
+            LLC_directory[set_index].metadata_per_set[address].sharers.insert(LLC_directory[set_index].metadata_per_set[address].owner);
+            LLC_directory[set_index].metadata_per_set[address].owner = -1;
+        } else {
+            assert((!is_present_in_LLC_directory) && is_present_in_NI_directory);
+            NI_directory[set_index].metadata_per_set[address].sharers.insert(NI_directory[set_index].metadata_per_set[address].owner);
             NI_directory[set_index].metadata_per_set[address].owner = -1;
         }
     }

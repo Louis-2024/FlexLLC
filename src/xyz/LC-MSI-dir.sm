@@ -34,23 +34,39 @@ MessageBuffer *responseFromMemory;
         LOC, AccessPermission:Read_Write, desc="LLC_Only_Clean";
         LOD, AccessPermission:Read_Write, desc="LLC_Only_Dirty";
 
+        // TODO: figure out the representation of NI and IN states
+        // Can NI lines be allocated in LLC / Directory?
+
         // transient states
         I_to_S_await_data, AccessPermission:Busy, desc="";
         I_to_M_await_data, AccessPermission:Busy, desc="";
         LOD_to_LOC_await_ack, AccessPermission:Busy, desc="";
+
+        I_to_S_await_data_NI, AccessPermission:Busy, desc="";
+        I_to_M_await_data_NI, AccessPermission:Busy, desc="";
     }
 
     enumeration(Event, desc="Directory events") {
         GetS, desc="";
         GetM, desc="";
 
+        GetS_NI, desc="";
+        GetM_NI, desc="";
+
         PutS_NotLastCopy, desc="";
         PutS_LastCopy_Clean, desc="";
         PutS_LastCopy_Dirty, desc="";
-        PutS_LastCopy_Dirty_WT, desc="";
+        PutS_LastCopy_Dirty_WriteThrough, desc="";
         PutM, desc="";
-        PutM_WT, desc="";
+        PutM_WriteThrough, desc="";
         PutLOD, desc="";
+
+        PutS_LastCopy_Clean_NI_BypassLLC, desc="";
+        PutS_LastCopy_Clean_NI_InsertToLLC, desc="";
+        PutS_LastCopy_Dirty_NI_BypassLLC, desc="";
+        PutS_LastCopy_Dirty_NI_InsertToLLC, desc="";
+        PutM_NI_BypassLLC, desc="";
+        PutM_NI_InsertToLLC, desc="";
 
         MemData, desc="";
         MemAck, desc="";
@@ -229,54 +245,45 @@ MessageBuffer *responseFromMemory;
 
     action(xyzAddSharer, desc="") {
         peek(request_in, RequestMsg) {
-            sum_prv_cores := sum_prv_cores + 1;
             cache_entry.Sharers.add(in_msg.Requestor);
-
-            /* Todo: add sharer in XYZ*/
-
+            xyzCacheMemory.addSharer(in_msg.addr, in_msg.Requestor, true);        
         }
     }
 
     action(xyzRemoveSharer, desc="") {
         peek(request_in, RequestMsg) {
             cache_entry.Sharers.remove(in_msg.Requestor);
-            sum_prv_cores := sum_prv_cores - 1;
-
-            /* Todo: remove sharer in XYZ */
-
+            xyzCacheMemory.removeSharer(in_msg.addr, in_msg.Requestor, true);
         }
     }
 
     action(xyzClearSharers, desc="") {
-        sum_prv_cores := sum_prv_cores - cache_entry.Sharers.count();
-        
-        /* Todo: clear sharer in XYZ */
-
-    }
-
-    action(xyzClearAllHolders, desc="") {
-        sum_prv_cores := 0;
-        
-        /* Todo: clear sharer in XYZ */
-
+        peek(request_in, RequestMsg) {
+            cache_entry.Sharers.clear();
+            xyzCacheMemory.clearSharers(in_msg.addr, true);
+        }
     }
 
     action(xyzSetOwner, desc="") {
         peek(request_in, RequestMsg) {
-            sum_prv_cores := sum_prv_cores - cache_entry.Sharers.count() + 1;
             cache_entry.Owner.add(in_msg.Requestor);
-
-            /* Todo: set owner in XYZ */
-
+            xyzCacheMemory.setOwner(in_msg.addr, in_msg.Requestor, true);
         }
     }
 
     action(xyzUnsetOwner, desc="") {
-        sum_prv_cores := sum_prv_cores - 1;
         cache_entry.Owner.clear();
+        xyzCacheMemory.unsetOwner(in_msg.addr, true);
+    }
 
-        /* Todo: clear owner in XYZ */
+    action(xyzConvertOwnerToSharer, desc="") {
+        cache_entry.Sharers.addNetDest(cache_entry.Owner);
+        cache_entry.Owner.clear();
+        xyzCacheMemory.convertOwnerToSharer(in_msg.addr, true);
+    }
 
+    action(xyzSetDirty, desc="") {
+        xyzCacheMemory.setDirty(in_msg.addr, true);
     }
 
     action(sendInvToHolders, desc="") {
@@ -385,16 +392,76 @@ MessageBuffer *responseFromMemory;
         }
     }
 
-    action(wakeUpBuffers, desc="") {
+    action(wakeUpAllBuffers, desc="") {
         wakeUpAllBuffers();
     }
 
+    // NI actions
+
+    action(xyzAddSharerNI, desc="") {
+        peek(request_in, RequestMsg) {
+            cache_entry.Sharers.add(in_msg.Requestor);
+            xyzCacheMemory.addSharer(in_msg.addr, in_msg.Requestor, false);        
+        }
+    }
+
+    action(xyzRemoveSharerNI, desc="") {
+        peek(request_in, RequestMsg) {
+            cache_entry.Sharers.remove(in_msg.Requestor);
+            xyzCacheMemory.removeSharer(in_msg.addr, in_msg.Requestor, false);
+        }
+    }
+
+    action(xyzClearSharersNI, desc="") {
+        peek(request_in, RequestMsg) {
+            cache_entry.Sharers.clear();
+            xyzCacheMemory.clearSharers(in_msg.addr, false);
+        }
+    }
+
+    action(xyzSetOwnerNI, desc="") {
+        peek(request_in, RequestMsg) {
+            cache_entry.Owner.add(in_msg.Requestor);
+            xyzCacheMemory.setOwner(in_msg.addr, in_msg.Requestor, false);
+        }
+    }
+
+    action(xyzUnsetOwnerNI, desc="") {
+        cache_entry.Owner.clear();
+        xyzCacheMemory.unsetOwner(in_msg.addr, false);
+    }
+
+    action(xyzConvertOwnerToSharerNI, desc="") {
+        cache_entry.Sharers.addNetDest(cache_entry.Owner);
+        cache_entry.Owner.clear();
+        xyzCacheMemory.convertOwnerToSharer(in_msg.addr, false);
+    }
+
+    action(xyzSetDirtyNI, desc="") {
+        xyzCacheMemory.setDirty(in_msg.addr, false);
+    }
+    
+
     // transitions
+
+    // 1. transitions from LOC / LOD
 
     transition(LOD, PutLOD, LOD_to_LOC_await_ack) {
         incrementCacheEntryMemAckCount;
         sendLLCDataToMem;
-        setDelayMarkDone;
+    }
+
+    transition(LOD_to_LOC_await_ack, MemAck) {
+        decrementCacheEntryMemAckCount;
+        popMemQueue;
+        wakeUpAllBuffers;
+    }
+
+    transition(LOD_to_LOC_await_ack, LastMemAck, LOC) {
+        decrementCacheEntryMemAckCount;
+        popMemQueue;
+        wakeUpAllBuffers;
+        markLLCDone;
     }
 
     transition({LOC, LOD}, GetS, S) {
@@ -405,33 +472,72 @@ MessageBuffer *responseFromMemory;
     }
 
     transition({LOC, LOD}, GetM, M) {
+        xyzSetDirty;
         xyzSetOwner;
-        sendLLCToReq;
+        sendDataToReq;
         popRequestQueue;
         markLLCDone_await_data;
     }
+
+    // 2. transitions from I
 
     transition(I, GetS, I_to_S_await_data) {
         allocateCacheBlock;
         sendMemRead;
         xyzAddSharer;
         popRequestQueue;
-        markLLCDone;
+    }
+
+    transition(I, GetM, I_to_M_await_data) {
+        allocateCacheBlock;
+        sendMemRead;
+        xyzSetDirty;
+        xyzSetOwner;
+        popRequestQueue;
     }
 
     transition(I_to_S_await_data, MemData, S) {
         sendDataToReq;
         writeMemDataToLLC;
         popMemQueue;
-        markLLCDone;
+        markLLCDone_await_data;
     }
 
     transition(I_to_M_await_data, MemData, M) {
         sendDataToReq;
         writeMemDataToLLC;
         popMemQueue;
-        markLLCDone;
+        markLLCDone_await_data;
     }
+
+    transition(I, GetS_NI, I_to_S_await_data_NI) {
+        // TODO: allocate incoming line in LLC
+        sendMemRead;
+        xyzAddSharerNI;
+        popRequestQueue;
+    }
+
+    transition(I, GetM_NI, I_to_M_await_data_NI) {
+        // TODO: allocate incoming line in LLC
+        sendMemRead;
+        xyzSetDirtyNI;
+        xyzSetOwnerNI;
+        popRequestQueue;
+    }
+
+    transition(I_to_S_await_data_NI, MemData, S) {
+        sendDataToReq;
+        popMemQueue;
+        markLLCDone_await_data;
+    }
+
+    transition(I_to_M_await_data_NI, MemData, M) {
+        sendDataToReq;
+        popMemQueue;
+        markLLCDone_await_data;
+    }
+
+    // 3. transitions from S
 
     transition(S, GetS) {
         sendDataToReq;
@@ -441,8 +547,9 @@ MessageBuffer *responseFromMemory;
     }
 
     transition(S, GetM, M) {
-        xyzClearAllHolders;
+        xyzClearSharers;
         sendInvToHolders;
+        xyzSetDirty;
         xyzSetOwner;
         sendDataToReq;
         popRequestQueue;
@@ -460,24 +567,59 @@ MessageBuffer *responseFromMemory;
         xyzRemoveSharer;
         sendPutAck;
         popRequestQueue;
-        markLLCDone; // To do: double check correctness
+        markLLCDone;
     }
 
-    transition(S, PutS_LastCopy_Dirty, LLC_Only_dirty) {
+    transition(S, PutS_LastCopy_Dirty, LOD) {
         xyzRemoveSharer;
         sendPutAck;
         popRequestQueue;
         markLLCDone;
     }
 
-    transition(S, PutS_LastCopy_Dirty_WT, LOD_to_LOC_await_ack) {
-        sendLLCDataToMem;
+    transition(S, PutS_LastCopy_Dirty_WriteThrough, LOD_to_LOC_await_ack) {
+        sendDataToMem;
         xyzRemoveSharer;
+        sendPutAck;
+        popRequestQueue;
+    }
+
+    // TODO: NI transitions
+
+
+
+
+    // 4. transitions from M
+
+    transition(M, GetS, S) {
+        sendFwdGetM;
+        xyzConvertOwnerToSharer;
+        xyzAddSharer;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    transition(M, GetM) {
+        sendFwdGetM;
+        xyzUnsetOwner;
+        xyzSetOwner;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    transition(M, PutM, LOD) {
+        xyzUnsetOwner;
         sendPutAck;
         popRequestQueue;
         markLLCDone;
     }
 
-    
-  
+    transition(M, PutM_WriteThrough, LOD_to_LOC_await_ack) {
+        incrementCacheEntryMemAckCount;
+        sendDataToMem;
+        xyzUnsetOwner;
+        sendPutAck;
+        popRequestQueue;
+    }
+
 }

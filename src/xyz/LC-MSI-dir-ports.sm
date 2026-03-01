@@ -8,18 +8,16 @@
                 Entry e := getCacheEntry(in_msg.addr);
                 TBE tbe := TBEs[in_msg.addr];
 
-                // add events
-
                 if (in_msg.Type == MemoryRequestType:MEMORY_READ) {
-
-                    // add events
-
+                    trigger(Event:MemData, in_msg.addr, e, tbe);
                 } else if (in_msg.Type == MemoryRequestType:MEMORY_WB) {
-
-                    // add events
-
+                    if(e.MemAckOutstanding == 1) {
+                        trigger(Event:LastMemAck, in_msg.addr, e, tbe);
+                    } else {
+                        trigger(Event:MemAck, in_msg.addr, e, tbe);
+                    }
                 } else {
-                    error("Invalid message");
+                    assert(false);
                 }
             }
         }
@@ -30,19 +28,13 @@
             peek(response_in, ResponseMsg) {
                 Entry e := getCacheEntry(in_msg.addr);
                 TBE tbe := TBEs[in_msg.addr];
-                
-                // add events
 
                 if (in_msg.Type == CoherenceResponseType:Data) {
-
-                    // add events
-
+                    trigger(Event:Data, in_msg.addr, e, tbe);
                 } else if(in_msg.Type == CoherenceResponseType:InvAck) {
-
-                    // add events
-
+                    trigger(Event:InvAck, in_msg.addr, e, tbe);
                 } else {
-                    error("Unexpected message type.");
+                    assert(false);
                 }
             }
         }
@@ -54,16 +46,14 @@
                 Entry e := getCacheEntry(in_msg.addr);
                 TBE tbe := TBEs[in_msg.addr];
 
-                // add events
-
                 if(in_msg.Type == CoherenceRequestType:GetS) {
-
-                    // add events
-
+                    // 1. check if the set have vac / LLC-Only clean line
+                    // yes -> Get as inclusive
+                    // no -> Get as non-inclusive
                 } else if (in_msg.Type == CoherenceRequestType:GetM) {
-
-                    // add events
-
+                    // 1. check if the set have vac / LLC-Only clean line
+                    // yes -> Get as inclusive
+                    // no -> Get as non-inclusive
                 } else if (in_msg.Type == CoherenceRequestType:PutS) {
                     
                     // add events
