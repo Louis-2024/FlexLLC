@@ -11,11 +11,7 @@
                 if (in_msg.Type == MemoryRequestType:MEMORY_READ) {
                     trigger(Event:MemData, in_msg.addr, e, tbe);
                 } else if (in_msg.Type == MemoryRequestType:MEMORY_WB) {
-                    if(e.MemAckOutstanding == 1) {
-                        trigger(Event:LastMemAck, in_msg.addr, e, tbe);
-                    } else {
-                        trigger(Event:MemAck, in_msg.addr, e, tbe);
-                    }
+                    trigger(Event:MemAck, in_msg.addr, e, tbe);
                 } else {
                     assert(false);
                 }
@@ -29,13 +25,7 @@
                 Entry e := getCacheEntry(in_msg.addr);
                 TBE tbe := TBEs[in_msg.addr];
 
-                if (in_msg.Type == CoherenceResponseType:Data) {
-                    trigger(Event:Data, in_msg.addr, e, tbe);
-                } else if(in_msg.Type == CoherenceResponseType:InvAck) {
-                    trigger(Event:InvAck, in_msg.addr, e, tbe);
-                } else {
-                    assert(false);
-                }
+                assert(false);
             }
         }
     }
@@ -47,23 +37,81 @@
                 TBE tbe := TBEs[in_msg.addr];
 
                 if(in_msg.Type == CoherenceRequestType:GetS) {
-                    // 1. check if the set have vac / LLC-Only clean line
-                    // yes -> Get as inclusive
-                    // no -> Get as non-inclusive
+
+                    if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
+                        // fetch as IN
+                        trigger(Event:GetS, in_msg.addr, e, tbe);
+                    } else {
+                        // fetch as NI
+                        trigger(Event:GetS_NI, in_msg.addr, e, tbe);
+                    }
                 } else if (in_msg.Type == CoherenceRequestType:GetM) {
-                    // 1. check if the set have vac / LLC-Only clean line
-                    // yes -> Get as inclusive
-                    // no -> Get as non-inclusive
+                    if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
+                        // fetch as IN
+                        trigger(Event:GetM, in_msg.addr, e, tbe);
+                    } else {
+                        // fetch as NI
+                        trigger(Event:GetM_NI, in_msg.addr, e, tbe);
+                    }
+
                 } else if (in_msg.Type == CoherenceRequestType:PutS) {
-                    
-                    // add events
+
+                    if (xyzCacheMemory.containLLCLine(in_msg.addr)) {
+                        // evict IN
+                        if (xyzCacheMemory.getIsDirty(in_msg.addr, true)) {
+                            if (xyzCacheMemory.getNumberOfSharers(in_msg.addr, true) > 1) {
+                                trigger(Event:PutS_NotLastCopy, in_msg.addr, e, tbe);
+                            } else if (xyzCacheMemory.getNumberOfSharers(in_msg.addr, true) == 1) {
+                                trigger(Event:PutS_LastCopy_Dirty, in_msg.addr, e, tbe);
+                            } else {
+                                assert(false);
+                            }
+                        } else {
+                            if (xyzCacheMemory.getNumberOfSharers(in_msg.addr, true) > 1) {
+                                trigger(Event:PutS_NotLastCopy, in_msg.addr, e, tbe);
+                            } else if (xyzCacheMemory.getNumberOfSharers(in_msg.addr, true) == 1) {
+                                trigger(Event:PutS_LastCopy_Clean, in_msg.addr, e, tbe);
+                            } else {
+                                assert(false);
+                            }
+                        }
+                    } else if (xyzCacheMemory.containNILine(in_msg.addr)) {
+                        // evict NI
+                        if (xyzCacheMemory.getIsDirty(in_msg.addr, false)) {
+                            if (xyzCacheMemory.getNumberOfSharers(in_msg.addr, false) > 1) {
+                                trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
+                            } else if (xyzCacheMemory.getNumberOfSharers(in_msg.addr, false) == 1) {
+                                trigger(Event:PutS_LastCopy_Dirty_NI_BypassLLC, in_msg.addr, e, tbe);
+                            } else {
+                                assert(false);
+                            }
+                        } else {
+                            if (xyzCacheMemory.getNumberOfSharers(in_msg.addr, false) > 1) {
+                                trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
+                            } else if (xyzCacheMemory.getNumberOfSharers(in_msg.addr, false) == 1) {
+                                trigger(Event:PutS_LastCopy_Clean_NI_BypassLLC, in_msg.addr, e, tbe);
+                            } else {
+                                assert(false);
+                            }
+                        }
+                    } else {
+                        assert(false);
+                    }
 
                 } else if (in_msg.Type == CoherenceRequestType:PutM) {
-                   
-                   // add events
-                   
+
+                    if (xyzCacheMemory.containLLCLine(in_msg.addr)) {
+                        // evict IN
+                        trigger(Event:PutM, in_msg.addr, e, tbe);
+                    } else if (xyzCacheMemory.containNILine(in_msg.addr)) {
+                        // evict NI
+                        trigger(Event:PutM_NI_BypassLLC, in_msg.addr, e, tbe);
+                    } else {
+                        assert(false);
+                    }
+                    
                 } else {
-                    error("Unexpected message type.");
+                    assert(false);
                 }
             }
         }

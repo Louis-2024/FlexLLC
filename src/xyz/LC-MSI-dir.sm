@@ -33,9 +33,9 @@ MessageBuffer *responseFromMemory;
         I, AccessPermission:Read_Write, desc="";
         LOC, AccessPermission:Read_Write, desc="LLC_Only_Clean";
         LOD, AccessPermission:Read_Write, desc="LLC_Only_Dirty";
-
-        // TODO: figure out the representation of NI and IN states
-        // Can NI lines be allocated in LLC / Directory?
+        
+        M_NI, AccessPermission:Invalid, desc="";
+        S_NI, AccessPermission:Read_Only, desc="";
 
         // transient states
         I_to_S_await_data, AccessPermission:Busy, desc="";
@@ -44,6 +44,7 @@ MessageBuffer *responseFromMemory;
 
         I_to_S_await_data_NI, AccessPermission:Busy, desc="";
         I_to_M_await_data_NI, AccessPermission:Busy, desc="";
+        DirtyNI_to_I_await_ack, AccessPermission:Busy, desc="";
     }
 
     enumeration(Event, desc="Directory events") {
@@ -61,6 +62,8 @@ MessageBuffer *responseFromMemory;
         PutM_WriteThrough, desc="";
         PutLOD, desc="";
 
+        PutS_NotLastCopy_NI_BypassLLC, desc="";
+        PutS_NotLastCopy_NI_InsertToLLC, desc="";
         PutS_LastCopy_Clean_NI_BypassLLC, desc="";
         PutS_LastCopy_Clean_NI_InsertToLLC, desc="";
         PutS_LastCopy_Dirty_NI_BypassLLC, desc="";
@@ -70,7 +73,6 @@ MessageBuffer *responseFromMemory;
 
         MemData, desc="";
         MemAck, desc="";
-        LastMemAck, desc="";
     }
 
     // structures
@@ -78,7 +80,6 @@ MessageBuffer *responseFromMemory;
     structure(TBE, desc="MSHR like requests", main="false") {
         State TBEState,         desc="State of block";
         DataBlock DataBlk,      desc="Data for the block. Needed for MI_A";
-        int MemAckOutstanding,  desc="Number of outstanding Acks from the main memory";
     }
 
     structure(Entry, desc="...", interface="AbstractCacheEntry") {
@@ -86,7 +87,6 @@ MessageBuffer *responseFromMemory;
         NetDest Sharers,        desc="Sharers for this block";
         NetDest Owner,          desc="Owner of this block";
         DataBlock DataBlk,      desc="Data in the block";
-        int MemAckOutstanding,  desc="Number of outstanding Acks from the main memory";
     }
 
     structure(TBETable, external="yes") {
@@ -120,16 +120,29 @@ MessageBuffer *responseFromMemory;
             return tbe.TBEState;
         } else if(is_valid(cache_entry)) {
             return cache_entry.DirState;
-        } else {
-            return State:I;
+        } else if (xyzCacheMemory.containNILine(addr)) {
+            // if the line is IN, state should be decided by XYZCacheMemory
+            if (xyzCacheMemory.getNIState(addr) == 1) {
+                return State:S_NI;
+            } else if (xyzCacheMemory.getNIState(addr) == 2) {
+                return State:M_NI;
+            } else if (xyzCacheMemory.getNIState(addr) == 3) {
+                return State:I_to_S_await_data_NI;
+            } else if (xyzCacheMemory.getNIState(addr) == 4) {
+                return State:I_to_M_await_data_NI;
+            } else if (xyzCacheMemory.getNIState(addr) == 5) {
+                return State:DirtyNI_to_I_await_ack;
+            }
         }
+        return State:I;
     }
 
     void setState(TBE tbe, Entry cache_entry, Addr addr, State state) {
+        // Note: only handle the states of IN lines
         if(is_valid(tbe)) {
             tbe.TBEState := state;
         }
-        if(is_valid(cache_entry) ){
+        if(is_valid(cache_entry)){
             cache_entry.DirState := state;
         }
     }
@@ -199,14 +212,6 @@ MessageBuffer *responseFromMemory;
         delayMarkDone := false;
     }
 
-    action(incrementCacheEntryMemAckCount, desc="") {
-        cache_entry.MemAckOutstanding := cache_entry.MemAckOutstanding + 1;
-    }
-
-    action(decrementCacheEntryMemAckCount, desc="") {
-        cache_entry.MemAckOutstanding := cache_entry.MemAckOutstanding - 1;
-    }
-
     action(sendMemRead, desc="Send a memory read request") {
         peek(request_in, RequestMsg) {
             enqueue(memQueue_out, MemoryMsg, toMemLatency) {
@@ -272,21 +277,27 @@ MessageBuffer *responseFromMemory;
     }
 
     action(xyzUnsetOwner, desc="") {
-        cache_entry.Owner.clear();
-        xyzCacheMemory.unsetOwner(in_msg.addr, true);
+        peek(request_in, RequestMsg) {
+            cache_entry.Owner.clear();
+            xyzCacheMemory.unsetOwner(in_msg.addr, true);
+        }
     }
 
     action(xyzConvertOwnerToSharer, desc="") {
-        cache_entry.Sharers.addNetDest(cache_entry.Owner);
-        cache_entry.Owner.clear();
-        xyzCacheMemory.convertOwnerToSharer(in_msg.addr, true);
+        peek(request_in, RequestMsg) {
+            cache_entry.Sharers.addNetDest(cache_entry.Owner);
+            cache_entry.Owner.clear();
+            xyzCacheMemory.convertOwnerToSharer(in_msg.addr, true);
+        }
     }
 
     action(xyzSetDirty, desc="") {
-        xyzCacheMemory.setDirty(in_msg.addr, true);
+        peek(request_in, RequestMsg) {
+            xyzCacheMemory.setDirty(in_msg.addr, true);
+        }
     }
 
-    action(sendInvToHolders, desc="") {
+    action(sendInvToSharers, desc="") {
         peek(request_in, RequestMsg) {
             enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
@@ -350,14 +361,7 @@ MessageBuffer *responseFromMemory;
     }
 
     action(allocateCacheBlock, desc="") {
-        /* XYZ code might need updates */
         set_cache_entry(xyzCacheMemory.allocate(address, new Entry));
-    }
-
-    action(deallocateCacheBlock, "dC", desc="Deallocate a cache block") {
-        /* XYZ code might need updates */
-        xyzCacheMemory.deallocate(address);
-        unset_cache_entry();
     }
 
     action(writeMemDataToLLC, desc="") {
@@ -392,11 +396,27 @@ MessageBuffer *responseFromMemory;
         }
     }
 
-    action(wakeUpAllBuffers, desc="") {
+    action(wakeUpBuffers, desc="") {
         wakeUpAllBuffers();
     }
 
     // NI actions
+
+    action(setNITransientStateTo_I_to_S_await_data_NI, desc="") {
+        xyzCacheMemory.setNITransientState(address, 3);
+    }
+
+    action(setNITransientStateTo_I_to_M_await_data_NI, desc="") {
+        xyzCacheMemory.setNITransientState(address, 4);
+    }
+
+    action(setNITransientStateTo_DirtyNI_to_I_await_ack, desc="") {
+        xyzCacheMemory.setNITransientState(address, 5);
+    }
+
+    action(unsetNITransientState, desc="") {
+        xyzCacheMemory.setNITransientState(address, 0);
+    }
 
     action(xyzAddSharerNI, desc="") {
         peek(request_in, RequestMsg) {
@@ -427,40 +447,43 @@ MessageBuffer *responseFromMemory;
     }
 
     action(xyzUnsetOwnerNI, desc="") {
-        cache_entry.Owner.clear();
-        xyzCacheMemory.unsetOwner(in_msg.addr, false);
+        peek(request_in, RequestMsg) {
+            cache_entry.Owner.clear();
+            xyzCacheMemory.unsetOwner(in_msg.addr, false);
+        }
     }
 
     action(xyzConvertOwnerToSharerNI, desc="") {
-        cache_entry.Sharers.addNetDest(cache_entry.Owner);
-        cache_entry.Owner.clear();
-        xyzCacheMemory.convertOwnerToSharer(in_msg.addr, false);
+        peek(request_in, RequestMsg) {
+            cache_entry.Sharers.addNetDest(cache_entry.Owner);
+            cache_entry.Owner.clear();
+            xyzCacheMemory.convertOwnerToSharer(in_msg.addr, false);
+        }
     }
 
     action(xyzSetDirtyNI, desc="") {
-        xyzCacheMemory.setDirty(in_msg.addr, false);
+        peek(request_in, RequestMsg) {
+            xyzCacheMemory.setDirty(in_msg.addr, false);
+        }
     }
     
+    action(xyzDeallocateMetadataNI, desc="") {
+        peek(request_in, RequestMsg) {
+            xyzCacheMemory.removeLineFromNIDirectory(in_msg.addr);
+        }
+    }
 
     // transitions
 
     // 1. transitions from LOC / LOD
 
     transition(LOD, PutLOD, LOD_to_LOC_await_ack) {
-        incrementCacheEntryMemAckCount;
         sendLLCDataToMem;
     }
 
-    transition(LOD_to_LOC_await_ack, MemAck) {
-        decrementCacheEntryMemAckCount;
+    transition(LOD_to_LOC_await_ack, MemAck, LOC) {
         popMemQueue;
-        wakeUpAllBuffers;
-    }
-
-    transition(LOD_to_LOC_await_ack, LastMemAck, LOC) {
-        decrementCacheEntryMemAckCount;
-        popMemQueue;
-        wakeUpAllBuffers;
+        wakeUpBuffers;
         markLLCDone;
     }
 
@@ -511,27 +534,29 @@ MessageBuffer *responseFromMemory;
     }
 
     transition(I, GetS_NI, I_to_S_await_data_NI) {
-        // TODO: allocate incoming line in LLC
+        setNITransientStateTo_I_to_S_await_data_NI;
         sendMemRead;
         xyzAddSharerNI;
         popRequestQueue;
     }
 
     transition(I, GetM_NI, I_to_M_await_data_NI) {
-        // TODO: allocate incoming line in LLC
+        setNITransientStateTo_I_to_M_await_data_NI;
         sendMemRead;
         xyzSetDirtyNI;
         xyzSetOwnerNI;
         popRequestQueue;
     }
 
-    transition(I_to_S_await_data_NI, MemData, S) {
+    transition(I_to_S_await_data_NI, MemData, S_NI) {
+        unsetNITransientState;
         sendDataToReq;
         popMemQueue;
         markLLCDone_await_data;
     }
 
-    transition(I_to_M_await_data_NI, MemData, M) {
+    transition(I_to_M_await_data_NI, MemData, M_NI) {
+        unsetNITransientState;
         sendDataToReq;
         popMemQueue;
         markLLCDone_await_data;
@@ -548,7 +573,7 @@ MessageBuffer *responseFromMemory;
 
     transition(S, GetM, M) {
         xyzClearSharers;
-        sendInvToHolders;
+        sendInvToSharers;
         xyzSetDirty;
         xyzSetOwner;
         sendDataToReq;
@@ -584,11 +609,6 @@ MessageBuffer *responseFromMemory;
         popRequestQueue;
     }
 
-    // TODO: NI transitions
-
-
-
-
     // 4. transitions from M
 
     transition(M, GetS, S) {
@@ -615,9 +635,48 @@ MessageBuffer *responseFromMemory;
     }
 
     transition(M, PutM_WriteThrough, LOD_to_LOC_await_ack) {
-        incrementCacheEntryMemAckCount;
         sendDataToMem;
         xyzUnsetOwner;
+        sendPutAck;
+        popRequestQueue;
+    }
+
+    // 5. transitions for S_NI
+
+    transition(S_NI, PutS_NotLastCopy_NI_BypassLLC) {
+        xyzRemoveSharerNI;
+        sendPutAck;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    transition(S_NI, PutS_LastCopy_Clean_NI_BypassLLC, I) {
+        xyzDeallocateMetadataNI;
+        sendPutAck;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    transition(S_NI, PutS_LastCopy_Dirty_NI_BypassLLC, DirtyNI_to_I_await_ack) {
+        setNITransientStateTo_DirtyNI_to_I_await_ack;
+        sendDataToMem;
+        xyzRemoveSharerNI;
+        sendPutAck;
+        popRequestQueue;
+    }
+
+    transition(DirtyNI_to_I_await_ack, MemAck, I) {
+        xyzDeallocateMetadataNI;
+        popMemQueue;
+        wakeUpBuffers;
+        markLLCDone;
+    }
+
+    // 6. transitions for M_NI
+
+    transition(M_NI, PutM_NI_BypassLLC, DirtyNI_to_I_await_ack) {
+        sendDataToMem;
+        xyzUnsetOwnerNI;
         sendPutAck;
         popRequestQueue;
     }
