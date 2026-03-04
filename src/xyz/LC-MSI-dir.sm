@@ -309,6 +309,10 @@ MessageBuffer *responseFromMemory;
 
     // functional actions
 
+    action(assertFalse, desc="") {
+        assert(false);
+    }
+
     action(copyRequestDataToLLC, desc="") {
         peek(request_in, RequestMsg) {      
             assert(is_valid(cache_entry));
@@ -613,16 +617,16 @@ MessageBuffer *responseFromMemory;
     // 5. transitions between I and NI
 
     transition(I, GetS_NI, I_to_S_await_mem_data_NI) {
-        setNITransientStateTo_I_to_S_await_mem_data_NI;
         xyzAddSharerNI;
+        setNITransientStateTo_I_to_S_await_mem_data_NI;
         sendMemRead;
         popRequestQueue;
     }
 
     transition(I, GetM_NI, I_to_M_await_mem_data_NI) {
-        setNITransientStateTo_I_to_M_await_mem_data_NI;
         xyzAddOwnerNI;
         xyzSetIsDirty;
+        setNITransientStateTo_I_to_M_await_mem_data_NI;
         sendMemRead;
         popRequestQueue;
     }
@@ -658,11 +662,11 @@ MessageBuffer *responseFromMemory;
     }
 
     transition(S_NI, PutS_LastCopy_Dirty_NI_BypassLLC, DirtyNI_to_I_await_ack) {
-        setNITransientStateTo_DirtyNI_to_I_await_ack;
         sendDataToMem;
         xyzUnsetIsDirty;
         sendPutAck;
         xyzRemoveSharer;
+        setNITransientStateTo_DirtyNI_to_I_await_ack;
         popRequestQueue;
     }
 
@@ -673,14 +677,47 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
-    transition(S_NI, GetS) {
-        // TODO: fwd request instead
-        xyzAddSharer;
+    transition(S_NI, GetS, S) {
+        assertFalse;
         popRequestQueue;
-        markLLCDone_await_data; // or otherwise?
+    }
+
+    transition(S_NI, GetM, M) {
+        assertFalse;
+        popRequestQueue;
+    }
+
+    transition(S_NI, GetS_NI) {
+        assertFalse;
+        popRequestQueue;
+    }
+
+    transition(S_NI, GetM_NI, M_NI) {
+        assertFalse;
+        popRequestQueue;
     }
 
     // 7. transitions for M_NI
+
+    transition(M_NI, GetS, M) {
+        assertFalse;
+        popRequestQueue;
+    }
+    
+    transition(M_NI, GetM, M) {
+        assertFalse;
+        popRequestQueue;
+    }
+    
+    transition(M_NI, GetS_NI) {
+        assertFalse;
+        popRequestQueue;
+    }
+    
+    transition(M_NI, GetM_NI) {
+        assertFalse;
+        popRequestQueue;
+    }
 
     transition(M_NI, PutM_NI_BypassLLC, DirtyNI_to_I_await_ack) {
         sendDataToMem;

@@ -222,13 +222,17 @@ public:
     int getNIState(Addr address) {
         assert(containNILine(address));
         int64_t set_index = addressToCacheSet(address);
-        if ((NI_directory[set_index].metadata_per_set[address].sharers.count() > 0) && (NI_directory[set_index].metadata_per_set[address].owner.count() == 0)) {
-            return 1; // S_NI
-        } else if ((NI_directory[set_index].metadata_per_set[address].sharers.count() == 0) && (NI_directory[set_index].metadata_per_set[address].owner.count() > 0)) {
-            return 2; // M_NI
+        if (NI_directory[set_index].metadata_per_set[address].NI_transient_state == 0) {
+            if ((NI_directory[set_index].metadata_per_set[address].sharers.count() > 0) && (NI_directory[set_index].metadata_per_set[address].owner.count() == 0)) {
+                return 1; // S_NI
+            } else if ((NI_directory[set_index].metadata_per_set[address].sharers.count() == 0) && (NI_directory[set_index].metadata_per_set[address].owner.count() > 0)) {
+                return 2; // M_NI
+            }
         } else {
             return NI_directory[set_index].metadata_per_set[address].NI_transient_state;
         }
+        assert(false);
+        return 0;
     }
 
     void convertNILineToIN(Addr address) {

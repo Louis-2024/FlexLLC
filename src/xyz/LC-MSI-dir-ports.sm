@@ -41,7 +41,7 @@
 
                 if(in_msg.Type == CoherenceRequestType:GetS) {
 
-                    if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
+                    if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr) || xyzCacheMemory.containLLCLine(in_msg.addr)) {
                         // fetch as IN
                         DPRINTF(FlexLLC, "GetS: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                         trigger(Event:GetS, in_msg.addr, e, tbe);
@@ -53,7 +53,7 @@
 
                 } else if (in_msg.Type == CoherenceRequestType:GetM) {
                     
-                    if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
+                    if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr) || xyzCacheMemory.containLLCLine(in_msg.addr)) {
                         // fetch as IN
                         DPRINTF(FlexLLC, "GetM: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                         trigger(Event:GetM, in_msg.addr, e, tbe);
