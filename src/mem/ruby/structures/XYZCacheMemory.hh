@@ -202,6 +202,17 @@ public:
         }
     }
 
+    void unSetIsDirty(Addr address) {
+        int64_t set_index = addressToCacheSet(address);
+        if (containLLCLine(address)) {
+            LLC_directory[set_index].metadata_per_set[address].isDirty = 0;
+        } else if (containNILine(address)) {
+            NI_directory[set_index].metadata_per_set[address].isDirty = 0;
+        } else {
+            assert(false);
+        }
+    }
+
     void setNITransientState(Addr address, int state) {
         assert(containNILine(address));
         int64_t set_index = addressToCacheSet(address);

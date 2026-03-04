@@ -48,6 +48,7 @@ structure (XYZCacheMemory, external = "yes") {
     void convertOwnerToSharer(Addr, bool);
     
     void setIsDirty(Addr);
+    void unSetIsDirty(Addr);
     bool getIsDirty(Addr);
     bool containLLCLine(Addr);
     bool containNILine(Addr);
