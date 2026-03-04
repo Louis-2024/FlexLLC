@@ -33,6 +33,7 @@ AbstractCacheEntry* XYZCacheMemory::allocate(Addr address, AbstractCacheEntry *e
         // 3. allocate new line
         new_entry = CacheMemory::allocate(address, entry);
         assert(m_cache[target_set][target_way] != nullptr);
+        assert(lookup(address) != nullptr);
     } else {
         assert(false);
     }
@@ -40,6 +41,7 @@ AbstractCacheEntry* XYZCacheMemory::allocate(Addr address, AbstractCacheEntry *e
 }
 
 void XYZCacheMemory::deallocate(Addr address) {
+    assert(containLLCLine(address));
     CacheMemory::deallocate(address);
     removeLineFromLLCDirectory(address);
 }

@@ -38,13 +38,19 @@ MessageBuffer *responseFromMemory;
         S_NI, AccessPermission:Read_Only, desc="";
 
         // transient states
-        I_to_S_await_data, AccessPermission:Busy, desc="";
-        I_to_M_await_data, AccessPermission:Busy, desc="";
+        I_to_S_await_mem_data, AccessPermission:Busy, desc="";
+        I_to_M_await_mem_data, AccessPermission:Busy, desc="";
         LOD_to_LOC_await_ack, AccessPermission:Busy, desc="";
+        
+        S_await_cache_data, AccessPermission:Busy, desc="";
+        M_await_cache_data, AccessPermission:Busy, desc="";
 
-        I_to_S_await_data_NI, AccessPermission:Busy, desc="";
-        I_to_M_await_data_NI, AccessPermission:Busy, desc="";
+        I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
+        I_to_M_await_mem_data_NI, AccessPermission:Busy, desc="";
         DirtyNI_to_I_await_ack, AccessPermission:Busy, desc="";
+
+        S_NI_await_cache_data, AccessPermission:Busy, desc="";
+        M_NI_await_cache_data, AccessPermission:Busy, desc="";
     }
 
     enumeration(Event, desc="Directory events") {
@@ -73,6 +79,7 @@ MessageBuffer *responseFromMemory;
 
         MemData, desc="";
         MemAck, desc="";
+        CacheData, desc="";
     }
 
     // structures
@@ -84,8 +91,6 @@ MessageBuffer *responseFromMemory;
 
     structure(Entry, desc="...", interface="AbstractCacheEntry") {
         State DirState,         desc="Directory state";
-        NetDest Sharers,        desc="Sharers for this block";
-        NetDest Owner,          desc="Owner of this block";
         DataBlock DataBlk,      desc="Data in the block";
     }
 
@@ -127,9 +132,9 @@ MessageBuffer *responseFromMemory;
             } else if (xyzCacheMemory.getNIState(addr) == 2) {
                 return State:M_NI;
             } else if (xyzCacheMemory.getNIState(addr) == 3) {
-                return State:I_to_S_await_data_NI;
+                return State:I_to_S_await_mem_data_NI;
             } else if (xyzCacheMemory.getNIState(addr) == 4) {
-                return State:I_to_M_await_data_NI;
+                return State:I_to_M_await_mem_data_NI;
             } else if (xyzCacheMemory.getNIState(addr) == 5) {
                 return State:DirtyNI_to_I_await_ack;
             }
@@ -188,29 +193,7 @@ MessageBuffer *responseFromMemory;
 
     include "LC-MSI-dir-ports.sm";
 
-    // actions
-
-    action(markLLCDone, desc="") {
-        bus.markLLCDone();
-    }
-
-    action(markLLCDone_await_data, desc="") {
-        bus.markLLCDone(true);
-    }
-
-    action(markLLCDone_if_not_delayed, desc="") {
-        if(!delayMarkDone) {
-            bus.markLLCDone();
-        }
-    }
-
-    action(setDelayMarkDone, desc="") {
-        delayMarkDone := true;
-    }
-
-    action(unsetDelayMarkDone, desc="") {
-        delayMarkDone := false;
-    }
+    // message actions
 
     action(sendMemRead, desc="Send a memory read request") {
         peek(request_in, RequestMsg) {
@@ -248,80 +231,56 @@ MessageBuffer *responseFromMemory;
         }
     }
 
-    action(xyzAddSharer, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Sharers.add(in_msg.Requestor);
-            xyzCacheMemory.addSharer(in_msg.addr, in_msg.Requestor, true);        
-        }
-    }
-
-    action(xyzRemoveSharer, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Sharers.remove(in_msg.Requestor);
-            xyzCacheMemory.removeSharer(in_msg.addr, in_msg.Requestor, true);
-        }
-    }
-
-    action(xyzClearSharers, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Sharers.clear();
-            xyzCacheMemory.clearSharers(in_msg.addr, true);
-        }
-    }
-
-    action(xyzSetOwner, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Owner.add(in_msg.Requestor);
-            xyzCacheMemory.setOwner(in_msg.addr, in_msg.Requestor, true);
-        }
-    }
-
-    action(xyzUnsetOwner, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Owner.clear();
-            xyzCacheMemory.unsetOwner(in_msg.addr, true);
-        }
-    }
-
-    action(xyzConvertOwnerToSharer, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Sharers.addNetDest(cache_entry.Owner);
-            cache_entry.Owner.clear();
-            xyzCacheMemory.convertOwnerToSharer(in_msg.addr, true);
-        }
-    }
-
-    action(xyzSetDirty, desc="") {
-        peek(request_in, RequestMsg) {
-            xyzCacheMemory.setDirty(in_msg.addr, true);
-        }
-    }
-
+    // sendInvToSharers first, then update sharer
     action(sendInvToSharers, desc="") {
         peek(request_in, RequestMsg) {
             enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
                 out_msg.Type := CoherenceRequestType:Inv;
                 out_msg.Requestor := in_msg.Requestor;
-                out_msg.Destination := cache_entry.Sharers;
+                out_msg.Destination := xyzCacheMemory.getSharers(address);
                 out_msg.MessageSize := MessageSizeType:Control;
             }
         }
     }
 
+    // sendFwdGetM first, then update owner
     action(sendFwdGetM, desc="") {
         peek(request_in, RequestMsg) {
             enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
                 out_msg.Type := CoherenceRequestType:GetM;
                 out_msg.Requestor := in_msg.Requestor;
-                out_msg.Destination := cache_entry.Owner;
+                out_msg.Destination := xyzCacheMemory.getOwner(address);
                 out_msg.MessageSize := MessageSizeType:Control;
             }
         }
     }
 
-    action(sendDataToReq, desc="") {
+    // set owner and sharer first, then sendLLCDataToReq
+    action(sendLLCDataToReq, desc="") {
+        assert(is_valid(cache_entry));
+        peek(request_in, RequestMsg) {
+            enqueue(response_out, ResponseMsg, responseBusLatency) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceResponseType:Data;
+                out_msg.Sender := machineID;
+                out_msg.Destination.add(in_msg.Requestor);
+                out_msg.DataBlk := cache_entry.DataBlk;
+                out_msg.MessageSize := MessageSizeType:Response_Data;
+                out_msg.OriginalRequestor := in_msg.Requestor;
+                if (xyzCacheMemory.getOwner(address).isElement(in_msg.Requestor)) {
+                    out_msg.Acks := xyzCacheMemory.getSharers(address).count();
+                } else {
+                    out_msg.Acks := 0;
+                }
+                xyzCacheMemory.setMRU(cache_entry);
+            }
+        }
+    }
+
+    // set owner and sharer first, then sendMemDataToReq
+    action(sendMemDataToReq, desc="") {
         peek(memQueue_in, MemoryMsg) {
             enqueue(response_out, ResponseMsg, responseBusLatency) {
                 out_msg.addr := address;
@@ -331,8 +290,8 @@ MessageBuffer *responseFromMemory;
                 out_msg.DataBlk := in_msg.DataBlk;
                 out_msg.MessageSize := MessageSizeType:Data;
                 out_msg.OriginalRequestor := in_msg.OriginalRequestorMachId;
-                if (cache_entry.Owner.isElement(in_msg.OriginalRequestorMachId)) {
-                    out_msg.Acks := cache_entry.Sharers.count();
+                if (xyzCacheMemory.getOwner(address).isElement(in_msg.OriginalRequestorMachId)) {
+                    out_msg.Acks := xyzCacheMemory.getSharers(address).count();
                 } else {
                     out_msg.Acks := 0;
                 }
@@ -349,6 +308,78 @@ MessageBuffer *responseFromMemory;
                 out_msg.Destination.add(in_msg.Requestor);
                 out_msg.MessageSize := MessageSizeType:Control;
             }
+        }
+    }
+
+    // functional actions
+
+    action(markLLCDone, desc="") {
+        bus.markLLCDone();
+    }
+
+    action(markLLCDone_await_data, desc="") {
+        bus.markLLCDone(true);
+    }
+
+    action(markLLCDone_if_not_delayed, desc="") {
+        if(!delayMarkDone) {
+            bus.markLLCDone();
+        }
+    }
+
+    action(setDelayMarkDone, desc="") {
+        delayMarkDone := true;
+    }
+
+    action(unsetDelayMarkDone, desc="") {
+        delayMarkDone := false;
+    }
+
+    action(xyzAddSharer, desc="") {
+        peek(request_in, RequestMsg) {
+            xyzCacheMemory.addSharer(in_msg.addr, in_msg.Requestor, true);        
+        }
+    }
+
+    action(xyzRemoveSharer, desc="") {
+        peek(request_in, RequestMsg) {
+            xyzCacheMemory.removeSharer(in_msg.addr, in_msg.Requestor);
+        }
+    }
+
+    action(xyzClearSharers, desc="") {
+        peek(request_in, RequestMsg) {
+            xyzCacheMemory.clearSharers(in_msg.addr);
+        }
+    }
+
+    action(xyzAddOwner, desc="") {
+        peek(request_in, RequestMsg) {
+            xyzCacheMemory.addOwner(in_msg.addr, in_msg.Requestor, true);
+        }
+    }
+
+    action(xyzClearOwner, desc="") {
+        peek(request_in, RequestMsg) {
+            xyzCacheMemory.clearOwner(in_msg.addr);
+        }
+    }
+
+    action(xyzConvertOwnerToSharer, desc="") {
+        peek(request_in, RequestMsg) {
+            if (xyzCacheMemory.containLLCLine(in_msg.addr)) {
+                xyzCacheMemory.convertOwnerToSharer(in_msg.addr, true);
+            } else if (xyzCacheMemory.containNILine(in_msg.addr)) {
+                xyzCacheMemory.convertOwnerToSharer(in_msg.addr, false);
+            } else {
+                assert(false);
+            }
+        }
+    }
+
+    action(xyzSetIsDirty, desc="") {
+        peek(request_in, RequestMsg) {
+            xyzCacheMemory.setIsDirty(in_msg.addr);
         }
     }
 
@@ -376,37 +407,17 @@ MessageBuffer *responseFromMemory;
         }
     }
 
-    action(sendLLCDataToReq, desc="") {
-        peek(request_in, RequestMsg) {
-            enqueue(response_out, ResponseMsg, responseBusLatency) {
-                out_msg.addr := address;
-                out_msg.Type := CoherenceResponseType:Data;
-                out_msg.Sender := machineID;
-                out_msg.Destination.add(in_msg.Requestor);
-                out_msg.DataBlk := cache_entry.DataBlk;
-                out_msg.MessageSize := MessageSizeType:Response_Data;
-                out_msg.OriginalRequestor := in_msg.Requestor;
-                if (cache_entry.Owner.isElement(in_msg.Requestor)) {
-                    out_msg.Acks := cache_entry.Sharers.count();
-                } else {
-                    out_msg.Acks := 0;
-                }
-                xyzCacheMemory.setMRU(cache_entry);
-            }
-        }
-    }
-
     action(wakeUpBuffers, desc="") {
         wakeUpAllBuffers();
     }
 
     // NI actions
 
-    action(setNITransientStateTo_I_to_S_await_data_NI, desc="") {
+    action(setNITransientStateTo_I_to_S_await_mem_data_NI, desc="") {
         xyzCacheMemory.setNITransientState(address, 3);
     }
 
-    action(setNITransientStateTo_I_to_M_await_data_NI, desc="") {
+    action(setNITransientStateTo_I_to_M_await_mem_data_NI, desc="") {
         xyzCacheMemory.setNITransientState(address, 4);
     }
 
@@ -420,50 +431,13 @@ MessageBuffer *responseFromMemory;
 
     action(xyzAddSharerNI, desc="") {
         peek(request_in, RequestMsg) {
-            cache_entry.Sharers.add(in_msg.Requestor);
             xyzCacheMemory.addSharer(in_msg.addr, in_msg.Requestor, false);        
         }
     }
 
-    action(xyzRemoveSharerNI, desc="") {
+    action(xyzAddOwnerNI, desc="") {
         peek(request_in, RequestMsg) {
-            cache_entry.Sharers.remove(in_msg.Requestor);
-            xyzCacheMemory.removeSharer(in_msg.addr, in_msg.Requestor, false);
-        }
-    }
-
-    action(xyzClearSharersNI, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Sharers.clear();
-            xyzCacheMemory.clearSharers(in_msg.addr, false);
-        }
-    }
-
-    action(xyzSetOwnerNI, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Owner.add(in_msg.Requestor);
-            xyzCacheMemory.setOwner(in_msg.addr, in_msg.Requestor, false);
-        }
-    }
-
-    action(xyzUnsetOwnerNI, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Owner.clear();
-            xyzCacheMemory.unsetOwner(in_msg.addr, false);
-        }
-    }
-
-    action(xyzConvertOwnerToSharerNI, desc="") {
-        peek(request_in, RequestMsg) {
-            cache_entry.Sharers.addNetDest(cache_entry.Owner);
-            cache_entry.Owner.clear();
-            xyzCacheMemory.convertOwnerToSharer(in_msg.addr, false);
-        }
-    }
-
-    action(xyzSetDirtyNI, desc="") {
-        peek(request_in, RequestMsg) {
-            xyzCacheMemory.setDirty(in_msg.addr, false);
+            xyzCacheMemory.addOwner(in_msg.addr, in_msg.Requestor, false);
         }
     }
     
@@ -489,75 +463,75 @@ MessageBuffer *responseFromMemory;
 
     transition({LOC, LOD}, GetS, S) {
         xyzAddSharer;
-        sendDataToReq;
+        sendLLCDataToReq;
         popRequestQueue;
         markLLCDone_await_data;
     }
 
     transition({LOC, LOD}, GetM, M) {
-        xyzSetDirty;
-        xyzSetOwner;
-        sendDataToReq;
+        xyzAddOwner;
+        xyzSetIsDirty;
+        sendLLCDataToReq;
         popRequestQueue;
         markLLCDone_await_data;
     }
 
     // 2. transitions from I
 
-    transition(I, GetS, I_to_S_await_data) {
+    transition(I, GetS, I_to_S_await_mem_data) {
         allocateCacheBlock;
-        sendMemRead;
         xyzAddSharer;
+        sendMemRead;
         popRequestQueue;
     }
 
-    transition(I, GetM, I_to_M_await_data) {
+    transition(I, GetM, I_to_M_await_mem_data) {
         allocateCacheBlock;
+        xyzAddOwner;
+        xyzSetIsDirty;
         sendMemRead;
-        xyzSetDirty;
-        xyzSetOwner;
         popRequestQueue;
     }
 
-    transition(I_to_S_await_data, MemData, S) {
-        sendDataToReq;
+    transition(I_to_S_await_mem_data, MemData, S) {
+        sendMemDataToReq;
         writeMemDataToLLC;
         popMemQueue;
         markLLCDone_await_data;
     }
 
-    transition(I_to_M_await_data, MemData, M) {
-        sendDataToReq;
+    transition(I_to_M_await_mem_data, MemData, M) {
+        sendMemDataToReq;
         writeMemDataToLLC;
         popMemQueue;
         markLLCDone_await_data;
     }
 
-    transition(I, GetS_NI, I_to_S_await_data_NI) {
-        setNITransientStateTo_I_to_S_await_data_NI;
-        sendMemRead;
+    transition(I, GetS_NI, I_to_S_await_mem_data_NI) {
+        setNITransientStateTo_I_to_S_await_mem_data_NI;
         xyzAddSharerNI;
-        popRequestQueue;
-    }
-
-    transition(I, GetM_NI, I_to_M_await_data_NI) {
-        setNITransientStateTo_I_to_M_await_data_NI;
         sendMemRead;
-        xyzSetDirtyNI;
-        xyzSetOwnerNI;
         popRequestQueue;
     }
 
-    transition(I_to_S_await_data_NI, MemData, S_NI) {
+    transition(I, GetM_NI, I_to_M_await_mem_data_NI) {
+        setNITransientStateTo_I_to_M_await_mem_data_NI;
+        xyzAddOwnerNI;
+        xyzSetIsDirty;
+        sendMemRead;
+        popRequestQueue;
+    }
+
+    transition(I_to_S_await_mem_data_NI, MemData, S_NI) {
         unsetNITransientState;
-        sendDataToReq;
+        sendMemDataToReq;
         popMemQueue;
         markLLCDone_await_data;
     }
 
-    transition(I_to_M_await_data_NI, MemData, M_NI) {
+    transition(I_to_M_await_mem_data_NI, MemData, M_NI) {
         unsetNITransientState;
-        sendDataToReq;
+        sendMemDataToReq;
         popMemQueue;
         markLLCDone_await_data;
     }
@@ -565,39 +539,39 @@ MessageBuffer *responseFromMemory;
     // 3. transitions from S
 
     transition(S, GetS) {
-        sendDataToReq;
         xyzAddSharer;
+        sendLLCDataToReq;
         popRequestQueue;
         markLLCDone_await_data;
     }
 
     transition(S, GetM, M) {
-        xyzClearSharers;
         sendInvToSharers;
-        xyzSetDirty;
-        xyzSetOwner;
-        sendDataToReq;
+        xyzClearSharers;
+        xyzAddOwner;
+        xyzSetIsDirty;
+        sendLLCDataToReq;
         popRequestQueue;
         markLLCDone_await_data;
     }
 
     transition(S, PutS_NotLastCopy) {
-        xyzRemoveSharer;
         sendPutAck;
+        xyzRemoveSharer;
         popRequestQueue;
         markLLCDone;
     }
 
     transition(S, PutS_LastCopy_Clean, LOC) {
-        xyzRemoveSharer;
         sendPutAck;
+        xyzRemoveSharer;
         popRequestQueue;
         markLLCDone;
     }
 
     transition(S, PutS_LastCopy_Dirty, LOD) {
-        xyzRemoveSharer;
         sendPutAck;
+        xyzRemoveSharer;
         popRequestQueue;
         markLLCDone;
     }
@@ -611,48 +585,50 @@ MessageBuffer *responseFromMemory;
 
     // 4. transitions from M
 
-    transition(M, GetS, S) {
+    transition(M, GetS) {
         sendFwdGetM;
-        xyzConvertOwnerToSharer;
-        xyzAddSharer;
+        xyzClearOwner;
+        xyzAddOwner;
         popRequestQueue;
-        markLLCDone;
+        markLLCDone; // if we want it to be completed in one slot, how?
     }
 
     transition(M, GetM) {
         sendFwdGetM;
-        xyzUnsetOwner;
-        xyzSetOwner;
+        xyzClearOwner;
+        xyzAddOwner;
         popRequestQueue;
         markLLCDone;
     }
 
     transition(M, PutM, LOD) {
-        xyzUnsetOwner;
         sendPutAck;
+        xyzClearOwner;
         popRequestQueue;
         markLLCDone;
     }
 
     transition(M, PutM_WriteThrough, LOD_to_LOC_await_ack) {
         sendDataToMem;
-        xyzUnsetOwner;
+        xyzClearOwner;
         sendPutAck;
         popRequestQueue;
     }
 
     // 5. transitions for S_NI
 
+    // TODO: add GET operations for S_NI and M_NI
+
     transition(S_NI, PutS_NotLastCopy_NI_BypassLLC) {
-        xyzRemoveSharerNI;
         sendPutAck;
+        xyzRemoveSharer;
         popRequestQueue;
         markLLCDone;
     }
 
     transition(S_NI, PutS_LastCopy_Clean_NI_BypassLLC, I) {
-        xyzDeallocateMetadataNI;
         sendPutAck;
+        xyzDeallocateMetadataNI;
         popRequestQueue;
         markLLCDone;
     }
@@ -660,8 +636,8 @@ MessageBuffer *responseFromMemory;
     transition(S_NI, PutS_LastCopy_Dirty_NI_BypassLLC, DirtyNI_to_I_await_ack) {
         setNITransientStateTo_DirtyNI_to_I_await_ack;
         sendDataToMem;
-        xyzRemoveSharerNI;
         sendPutAck;
+        xyzRemoveSharer;
         popRequestQueue;
     }
 
@@ -672,12 +648,19 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
+    transition(S_NI, GetS) {
+        // TODO: fwd request instead
+        xyzAddSharer;
+        popRequestQueue;
+        markLLCDone_await_data; // or otherwise?
+    }
+
     // 6. transitions for M_NI
 
     transition(M_NI, PutM_NI_BypassLLC, DirtyNI_to_I_await_ack) {
         sendDataToMem;
-        xyzUnsetOwnerNI;
         sendPutAck;
+        xyzClearOwner;
         popRequestQueue;
     }
 

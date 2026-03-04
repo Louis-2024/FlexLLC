@@ -3,10 +3,13 @@
 
 #include <unordered_set>
 #include <unordered_map>
+#include <set>
 #include <vector>
 
+#include "debug/FlexLLC.hh"
 #include "mem/ruby/structures/CacheMemory.hh"
 #include "mem/ruby/common/MachineID.hh"
+#include "mem/ruby/common/NetDest.hh"
 #include "params/XYZCache.hh"
 
 namespace gem5 {
@@ -14,9 +17,9 @@ namespace ruby {
 
 class XYZCacheMemory : public CacheMemory {
     struct MetadataPerLine {
-        std::unordered_set<MachineID> sharers;
-        std::unordered_set<MachineID> owner;
-        bool dirty = false;
+        NetDest sharers;
+        NetDest owner;
+        bool isDirty = false;
 
         int NI_transient_state = 0;
     };
@@ -32,6 +35,138 @@ public:
     virtual AbstractCacheEntry* allocate(Addr address, AbstractCacheEntry* new_entry);
     virtual void deallocate(Addr address);
 
+    // NetDest operations
+
+    NetDest getOwner(Addr address) {
+        int64_t set_index = addressToCacheSet(address);
+        NetDest dest;
+        if (containLLCLine(address)) {
+            dest = LLC_directory[set_index].metadata_per_set[address].owner;
+        } else if (containNILine(address)) {
+            dest = NI_directory[set_index].metadata_per_set[address].owner;
+        }
+        return dest;
+    }
+
+    NetDest getASharer(Addr address) {
+        int64_t set_index = addressToCacheSet(address);
+        NetDest dest;
+        if (containLLCLine(address)) {
+            dest.add(LLC_directory[set_index].metadata_per_set[address].sharers.smallestElement());
+        } else if (containNILine(address)) {
+            dest.add(NI_directory[set_index].metadata_per_set[address].sharers.smallestElement());
+        }
+        return dest;
+    }
+
+    NetDest getSharers(Addr address) {
+        int64_t set_index = addressToCacheSet(address);
+        NetDest dest;
+        if (containLLCLine(address)) {
+            dest = LLC_directory[set_index].metadata_per_set[address].sharers;
+        } else if (containNILine(address)) {
+            dest = NI_directory[set_index].metadata_per_set[address].sharers;
+        }
+        return dest;
+    }
+
+    void addSharer(Addr address, MachineID core, bool inclusive) {
+        int64_t set_index = addressToCacheSet(address);
+        bool is_present_in_LLC_directory = containLLCLine(address);
+        bool is_present_in_NI_directory = containNILine(address);
+
+        if (inclusive) {
+            assert(!is_present_in_NI_directory);
+            if (is_present_in_LLC_directory) {
+                LLC_directory[set_index].metadata_per_set[address].sharers.add(core);
+            } else {
+                NetDest dest;
+                dest.add(core);
+                LLC_directory[set_index].metadata_per_set[address] = { .sharers = dest };
+            }
+        } else {
+            assert(!is_present_in_LLC_directory);
+            if (is_present_in_NI_directory) {
+                NI_directory[set_index].metadata_per_set[address].sharers.add(core);
+            } else {
+                NetDest dest;
+                dest.add(core);
+                NI_directory[set_index].metadata_per_set[address] = { .sharers = dest };
+            }
+        }
+    }
+
+    void removeSharer(Addr address, MachineID core) {
+        int64_t set_index = addressToCacheSet(address);
+        if (containLLCLine(address)) {
+            LLC_directory[set_index].metadata_per_set[address].sharers.remove(core);
+        } else if (containNILine(address)) {
+            NI_directory[set_index].metadata_per_set[address].sharers.remove(core);
+        }
+    }
+
+    void clearSharers(Addr address) {
+        int64_t set_index = addressToCacheSet(address);
+        if (containLLCLine(address)) {
+            LLC_directory[set_index].metadata_per_set[address].sharers.clear();
+        } else if (containNILine(address)) {
+            NI_directory[set_index].metadata_per_set[address].sharers.clear();
+        }
+    }
+
+    void addOwner(Addr address, MachineID core, bool inclusive) {
+        int64_t set_index = addressToCacheSet(address);
+        bool is_present_in_LLC_directory = containLLCLine(address);
+        bool is_present_in_NI_directory = containNILine(address);
+
+        if (inclusive) {
+            assert(!is_present_in_NI_directory);
+            if (is_present_in_LLC_directory) {
+                LLC_directory[set_index].metadata_per_set[address].owner.add(core);
+            } else {
+                NetDest dest;
+                dest.add(core);
+                LLC_directory[set_index].metadata_per_set[address] = { .owner = dest };
+            }
+            assert(LLC_directory[set_index].metadata_per_set[address].owner.count() == 1);
+        } else {
+            assert(!is_present_in_LLC_directory);
+            if (is_present_in_NI_directory) {
+                NI_directory[set_index].metadata_per_set[address].owner.add(core);
+            } else {
+                NetDest dest;
+                dest.add(core);
+                NI_directory[set_index].metadata_per_set[address] = { .owner = dest };
+            }
+            assert(NI_directory[set_index].metadata_per_set[address].owner.count() == 1);
+        }
+    }
+
+    void clearOwner(Addr address) {
+        int64_t set_index = addressToCacheSet(address);
+        if (containLLCLine(address)) {
+            LLC_directory[set_index].metadata_per_set[address].owner.clear();
+        } else if (containNILine(address)) {
+            NI_directory[set_index].metadata_per_set[address].owner.clear();
+        }
+    }
+
+    void convertOwnerToSharer(Addr address, bool inclusive) {
+        int64_t set_index = addressToCacheSet(address);
+        bool is_present_in_LLC_directory = containLLCLine(address);
+        bool is_present_in_NI_directory = containNILine(address);
+
+        if (inclusive) {
+            assert((!is_present_in_NI_directory) && is_present_in_LLC_directory);
+            LLC_directory[set_index].metadata_per_set[address].sharers.addNetDest(LLC_directory[set_index].metadata_per_set[address].owner);
+            LLC_directory[set_index].metadata_per_set[address].owner.clear();
+        } else {
+            assert((!is_present_in_LLC_directory) && is_present_in_NI_directory);
+            NI_directory[set_index].metadata_per_set[address].sharers.addNetDest(NI_directory[set_index].metadata_per_set[address].owner);
+            NI_directory[set_index].metadata_per_set[address].owner.clear();
+        }
+    }
+
     // metadata operations
 
     bool containLLCLine(Addr address) {
@@ -44,28 +179,26 @@ public:
         return (NI_directory[set_index].metadata_per_set.find(address) != NI_directory[set_index].metadata_per_set.end());
     }
 
-    bool getIsDirty(Addr address, bool inclusive) {
-        if (inclusive) {
-            assert(containLLCLine(address));
-            int64_t set_index = addressToCacheSet(address);
-            return LLC_directory[set_index].metadata_per_set[address].dirty;
+    bool getIsDirty(Addr address) {
+        int64_t set_index = addressToCacheSet(address);
+        if (containLLCLine(address)) {
+            return LLC_directory[set_index].metadata_per_set[address].isDirty;
+        } else if (containNILine(address)) {
+            return NI_directory[set_index].metadata_per_set[address].isDirty;
         } else {
-            assert(containNILine(address));
-            int64_t set_index = addressToCacheSet(address);
-            return NI_directory[set_index].metadata_per_set[address].dirty;
+            assert(false);
+            return false;
         }
-
     }
-
-    int getNumberOfSharers(Addr address, bool inclusive) {
-        if (inclusive) {
-            assert(containLLCLine(address));
-            int64_t set_index = addressToCacheSet(address);
-            return LLC_directory[set_index].metadata_per_set[address].sharers.size();
+    
+    void setIsDirty(Addr address) {
+        int64_t set_index = addressToCacheSet(address);
+        if (containLLCLine(address)) {
+            LLC_directory[set_index].metadata_per_set[address].isDirty = 1;
+        } else if (containNILine(address)) {
+            NI_directory[set_index].metadata_per_set[address].isDirty = 1;
         } else {
-            assert(containNILine(address));
-            int64_t set_index = addressToCacheSet(address);
-            return NI_directory[set_index].metadata_per_set[address].sharers.size();
+            assert(false);
         }
     }
 
@@ -78,134 +211,12 @@ public:
     int getNIState(Addr address) {
         assert(containNILine(address));
         int64_t set_index = addressToCacheSet(address);
-        if ((NI_directory[set_index].metadata_per_set[address].sharers.size() > 0) && (NI_directory[set_index].metadata_per_set[address].owner.size() == 0)) {
+        if ((NI_directory[set_index].metadata_per_set[address].sharers.count() > 0) && (NI_directory[set_index].metadata_per_set[address].owner.count() == 0)) {
             return 1; // S_NI
-        } else if ((NI_directory[set_index].metadata_per_set[address].sharers.size() == 0) && (NI_directory[set_index].metadata_per_set[address].owner.size() > 0)) {
+        } else if ((NI_directory[set_index].metadata_per_set[address].sharers.count() == 0) && (NI_directory[set_index].metadata_per_set[address].owner.count() > 0)) {
             return 2; // M_NI
         } else {
             return NI_directory[set_index].metadata_per_set[address].NI_transient_state;
-        }
-    }
-
-    void addSharer(Addr address, MachineID core_id, bool inclusive) {
-        int64_t set_index = addressToCacheSet(address);
-        bool is_present_in_LLC_directory = containLLCLine(address);
-        bool is_present_in_NI_directory = containNILine(address);
-
-        if (inclusive) {
-            assert(!is_present_in_NI_directory);
-            if (is_present_in_LLC_directory) {
-                LLC_directory[set_index].metadata_per_set[address].sharers.insert(core_id);
-            } else {
-                LLC_directory[set_index].metadata_per_set[address] = { .sharers = {core_id} };
-            }
-        } else {
-            assert(!is_present_in_LLC_directory);
-            if (is_present_in_NI_directory) {
-                NI_directory[set_index].metadata_per_set[address].sharers.insert(core_id);
-            } else {
-                NI_directory[set_index].metadata_per_set[address] = { .sharers = {core_id} };
-            }
-        }
-    }
-
-    void removeSharer(Addr address, MachineID core_id, bool inclusive) {
-        int64_t set_index = addressToCacheSet(address);
-        bool is_present_in_LLC_directory = containLLCLine(address);
-        bool is_present_in_NI_directory = containNILine(address);
-
-        if (inclusive) {
-            assert((!is_present_in_NI_directory) && is_present_in_LLC_directory);
-            assert(LLC_directory[set_index].metadata_per_set[address].sharers.find(core_id) != LLC_directory[set_index].metadata_per_set[address].sharers.end());
-            LLC_directory[set_index].metadata_per_set[address].sharers.erase(core_id);
-        } else {
-            assert((!is_present_in_LLC_directory) && is_present_in_NI_directory);
-            assert(NI_directory[set_index].metadata_per_set[address].sharers.find(core_id) != NI_directory[set_index].metadata_per_set[address].sharers.end());
-            NI_directory[set_index].metadata_per_set[address].sharers.erase(core_id);
-        }
-    }
-
-    void clearSharers(Addr address, bool inclusive) {
-        int64_t set_index = addressToCacheSet(address);
-        bool is_present_in_LLC_directory = containLLCLine(address);
-        bool is_present_in_NI_directory = containNILine(address);
-
-        if (inclusive) {
-            assert((!is_present_in_NI_directory) && is_present_in_LLC_directory);
-            LLC_directory[set_index].metadata_per_set[address].sharers.clear();
-        } else {
-            assert((!is_present_in_LLC_directory) && is_present_in_NI_directory);
-            NI_directory[set_index].metadata_per_set[address].sharers.clear();
-        }
-    }
-
-    void setOwner(Addr address, MachineID core_id, bool inclusive) {
-        int64_t set_index = addressToCacheSet(address);
-        bool is_present_in_LLC_directory = containLLCLine(address);
-        bool is_present_in_NI_directory = containNILine(address);
-
-        if (inclusive) {
-            assert(!is_present_in_NI_directory);
-            assert(LLC_directory[set_index].metadata_per_set[address].owner.size() == 0);
-            if (is_present_in_LLC_directory) {
-                LLC_directory[set_index].metadata_per_set[address].owner.insert(core_id);
-            } else {
-                LLC_directory[set_index].metadata_per_set[address] = { .owner = {core_id} };
-            }
-        } else {
-            assert(!is_present_in_LLC_directory);
-            assert(NI_directory[set_index].metadata_per_set[address].owner.size() == 0);
-            if (is_present_in_NI_directory) {
-                NI_directory[set_index].metadata_per_set[address].owner.insert(core_id);
-            } else {
-                NI_directory[set_index].metadata_per_set[address] = { .owner = {core_id} };
-            }
-        }
-    }
-
-    void unsetOwner(Addr address, bool inclusive) {
-        int64_t set_index = addressToCacheSet(address);
-        bool is_present_in_LLC_directory = containLLCLine(address);
-        bool is_present_in_NI_directory = containNILine(address);
-
-        if (inclusive) {
-            assert((!is_present_in_NI_directory) && is_present_in_LLC_directory);
-            assert(LLC_directory[set_index].metadata_per_set[address].owner.size() == 1);
-            LLC_directory[set_index].metadata_per_set[address].owner.clear();
-        } else {
-            assert((!is_present_in_LLC_directory) && is_present_in_NI_directory);
-            assert(NI_directory[set_index].metadata_per_set[address].owner.size() == 1);
-            NI_directory[set_index].metadata_per_set[address].owner.clear();
-        }
-    }
-
-    void convertOwnerToSharer(Addr address, bool inclusive) {
-        int64_t set_index = addressToCacheSet(address);
-        bool is_present_in_LLC_directory = containLLCLine(address);
-        bool is_present_in_NI_directory = containNILine(address);
-
-        if (inclusive) {
-            assert((!is_present_in_NI_directory) && is_present_in_LLC_directory);
-            LLC_directory[set_index].metadata_per_set[address].sharers.merge(LLC_directory[set_index].metadata_per_set[address].owner);
-            LLC_directory[set_index].metadata_per_set[address].owner.clear();
-        } else {
-            assert((!is_present_in_LLC_directory) && is_present_in_NI_directory);
-            NI_directory[set_index].metadata_per_set[address].sharers.merge(NI_directory[set_index].metadata_per_set[address].owner);
-            NI_directory[set_index].metadata_per_set[address].owner.clear();
-        }
-    }
-
-    void setDirty(Addr address, bool inclusive) {
-        int64_t set_index = addressToCacheSet(address);
-        bool is_present_in_LLC_directory = containLLCLine(address);
-        bool is_present_in_NI_directory = containNILine(address);
-
-        if (inclusive) {
-            assert((!is_present_in_NI_directory) && is_present_in_LLC_directory);
-            LLC_directory[set_index].metadata_per_set[address].dirty = 1;
-        } else {
-            assert((!is_present_in_LLC_directory) && is_present_in_NI_directory);
-            NI_directory[set_index].metadata_per_set[address].dirty = 1;
         }
     }
 
@@ -272,7 +283,7 @@ public:
         std::unordered_set<Addr> llc_only_clean_lines;
 
         for (auto line = target_set.begin(); line != target_set.end(); line++) {
-            if ((!line->second.dirty) && (line->second.owner.size() == 0) && (line->second.sharers.size() == 0)) {
+            if ((!line->second.isDirty) && (line->second.owner.count() == 0) && (line->second.sharers.count() == 0)) {
                 llc_only_clean_lines.insert(line->first);
             }
         }
@@ -285,7 +296,7 @@ public:
         std::unordered_set<Addr> llc_only_dirty_lines;
 
         for (auto line = target_set.begin(); line != target_set.end(); line++) {
-            if ((line->second.dirty) && (line->second.owner.size() == 0) && (line->second.sharers.size() == 0)) {
+            if ((line->second.isDirty) && (line->second.owner.count() == 0) && (line->second.sharers.count() == 0)) {
                 llc_only_dirty_lines.insert(line->first);
             }
         }

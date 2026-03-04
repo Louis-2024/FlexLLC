@@ -37,20 +37,24 @@ structure (XYZCacheMemory, external = "yes") {
     bool checkResourceAvailable(CacheResourceType, Addr);
     Addr addressToCacheSet(Addr);
 
-    bool getIsDirty(Addr, bool);
-    int getNumberOfSharers(Addr, bool);
+    NetDest getOwner(Addr);
+    NetDest getASharer(Addr);
+    NetDest getSharers(Addr);
+    void addSharer(Addr, MachineID, bool);
+    void removeSharer(Addr, MachineID);
+    void clearSharers(Addr);
+    void addOwner(Addr, MachineID, bool);
+    void clearOwner(Addr);
+    void convertOwnerToSharer(Addr, bool);
+    
+    void setIsDirty(Addr);
+    bool getIsDirty(Addr);
     bool containLLCLine(Addr);
     bool containNILine(Addr);
-    int getNIState(Addr);
-    void setNITransientState(Addr, int);
-    void addSharer(Addr, MachineID, bool);
-    void removeSharer(Addr, MachineID, bool);
-    void clearSharers(Addr, bool);
-    void setOwner(Addr, MachineID, bool);
-    void unsetOwner(Addr, bool);
-    void convertOwnerToSharer(Addr, bool);
-    void setDirty(Addr, bool);
-    void removeLineFromNIDirectory(Addr);
     bool existVacancyPerSet(Addr);
     bool existLLCOnlyCleanLinePerSet(Addr);
+
+    int getNIState(Addr);
+    void setNITransientState(Addr, int);
+    void removeLineFromNIDirectory(Addr);
 }
