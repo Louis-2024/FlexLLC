@@ -243,13 +243,37 @@ MessageBuffer *responseFromMemory;
         }
     }
 
-    action(sendFwdGetM, desc="") {
+    action(sendFwdGetS, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(forward_out, RequestMsg, 1) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceRequestType:GetS;
+                out_msg.Requestor := in_msg.Requestor;
+                out_msg.Destination := xyzCacheMemory.getASharer(address);
+                out_msg.MessageSize := MessageSizeType:Control;
+            }
+        }
+    }
+
+    action(sendFwdGetMFromM, desc="") {
         peek(request_in, RequestMsg) {
             enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
                 out_msg.Type := CoherenceRequestType:GetM;
                 out_msg.Requestor := in_msg.Requestor;
                 out_msg.Destination := xyzCacheMemory.getOwner(address);
+                out_msg.MessageSize := MessageSizeType:Control;
+            }
+        }
+    }
+
+    action(sendFwdGetMFromS, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(forward_out, RequestMsg, 1) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceRequestType:GetM;
+                out_msg.Requestor := in_msg.Requestor;
+                out_msg.Destination := xyzCacheMemory.getASharer(address);
                 out_msg.MessageSize := MessageSizeType:Control;
             }
         }
@@ -320,6 +344,7 @@ MessageBuffer *responseFromMemory;
         }
     }
 
+    // maybe we don't need this
     action(copyResponseDataToLLC, desc="") {
         peek(response_in, ResponseMsg) {      
             assert(is_valid(cache_entry));
@@ -571,24 +596,24 @@ MessageBuffer *responseFromMemory;
 
     transition(S, PutS_LastCopy_Dirty_WriteThrough, LOD_to_LOC_await_ack) {
         sendDataToMem;
+        sendPutAck;
         xyzUnsetIsDirty;
         xyzRemoveSharer;
-        sendPutAck;
         popRequestQueue;
     }
 
     // 4. transitions from M
 
     transition(M, GetS) {
-        sendFwdGetM;
+        sendFwdGetMFromM;
         xyzClearOwner;
         xyzAddOwner;
         popRequestQueue;
-        markLLCDone; // if we want it to be completed in one slot, how?
+        markLLCDone;
     }
 
     transition(M, GetM) {
-        sendFwdGetM;
+        sendFwdGetMFromM;
         xyzClearOwner;
         xyzAddOwner;
         popRequestQueue;
@@ -606,9 +631,9 @@ MessageBuffer *responseFromMemory;
     transition(M, PutM_WriteThrough, LOD_to_LOC_await_ack) {
         copyRequestDataToLLC;
         sendDataToMem;
+        sendPutAck;
         xyzUnsetIsDirty;
         xyzClearOwner;
-        sendPutAck;
         popRequestQueue;
     }
 
@@ -647,6 +672,14 @@ MessageBuffer *responseFromMemory;
 
     // 6. transitions for S_NI
 
+    transition(DirtyNI_to_I_await_ack, MemAck, I) {
+        unsetNITransientState;
+        xyzDeallocateMetadataNI;
+        popMemQueue;
+        wakeUpBuffers;
+        markLLCDone;
+    }
+
     transition(S_NI, PutS_NotLastCopy_NI_BypassLLC) {
         sendPutAck;
         xyzRemoveSharer;
@@ -663,63 +696,51 @@ MessageBuffer *responseFromMemory;
 
     transition(S_NI, PutS_LastCopy_Dirty_NI_BypassLLC, DirtyNI_to_I_await_ack) {
         sendDataToMem;
-        xyzUnsetIsDirty;
         sendPutAck;
+        xyzUnsetIsDirty;
         xyzRemoveSharer;
         setNITransientStateTo_DirtyNI_to_I_await_ack;
         popRequestQueue;
     }
 
-    transition(DirtyNI_to_I_await_ack, MemAck, I) {
-        xyzDeallocateMetadataNI;
-        popMemQueue;
-        wakeUpBuffers;
+    transition(S_NI, GetS_NI) {
+        sendFwdGetS;
+        xyzAddSharer;
+        popRequestQueue;
         markLLCDone;
     }
 
-    transition(S_NI, GetS, S) {
-        assertFalse;
-        popRequestQueue;
-    }
-
-    transition(S_NI, GetM, M) {
-        assertFalse;
-        popRequestQueue;
-    }
-
-    transition(S_NI, GetS_NI) {
-        assertFalse;
-        popRequestQueue;
-    }
-
     transition(S_NI, GetM_NI, M_NI) {
-        assertFalse;
+        sendFwdGetMFromS;
+        xyzRemoveSharer;
+        sendInvToSharers;
+        xyzClearSharers;
+        xyzAddOwnerNI;
+        xyzSetIsDirty;
         popRequestQueue;
+        markLLCDone;
     }
 
     // 7. transitions for M_NI
 
-    transition(M_NI, GetS, M) {
-        assertFalse;
-        popRequestQueue;
-    }
-    
-    transition(M_NI, GetM, M) {
-        assertFalse;
-        popRequestQueue;
-    }
-    
     transition(M_NI, GetS_NI) {
-        assertFalse;
+        sendFwdGetMFromM;
+        xyzClearOwner;
+        xyzAddOwnerNI;
         popRequestQueue;
+        markLLCDone;
     }
     
     transition(M_NI, GetM_NI) {
-        assertFalse;
+        sendFwdGetMFromM;
+        xyzClearOwner;
+        xyzAddOwnerNI;
         popRequestQueue;
+        markLLCDone;
     }
 
     transition(M_NI, PutM_NI_BypassLLC, DirtyNI_to_I_await_ack) {
+        setNITransientStateTo_DirtyNI_to_I_await_ack;
         sendDataToMem;
         xyzUnsetIsDirty;
         sendPutAck;
