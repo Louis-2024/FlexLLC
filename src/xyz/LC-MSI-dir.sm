@@ -269,13 +269,15 @@ MessageBuffer *responseFromMemory;
 
     action(sendFwdGetMFromS, desc="") {
         peek(request_in, RequestMsg) {
+            NetDest dest := xyzCacheMemory.getASharer(address);
             enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
                 out_msg.Type := CoherenceRequestType:GetM;
                 out_msg.Requestor := in_msg.Requestor;
-                out_msg.Destination := xyzCacheMemory.getASharer(address);
+                out_msg.Destination := dest;
                 out_msg.MessageSize := MessageSizeType:Control;
             }
+            xyzCacheMemory.removeSharer(address, dest.smallestElement());
         }
     }
 
@@ -714,7 +716,6 @@ MessageBuffer *responseFromMemory;
 
     transition(S_NI, GetM_NI_From_NonSharer, M_NI) {
         sendFwdGetMFromS;
-        xyzRemoveSharer;
         sendInvToSharers;
         xyzClearSharers;
         xyzAddOwnerNI;

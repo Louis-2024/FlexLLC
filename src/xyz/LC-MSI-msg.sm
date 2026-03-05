@@ -58,6 +58,7 @@ structure(ResponseMsg, desc="Used for Dir->Cache and Fwd message responses",
     DataBlock DataBlk,           desc="data for the cache line";
     MessageSizeType MessageSize, desc="size category of the message";
     int Acks,                    desc="Number of acks required from others";
+    bool UpgradeToM, desc="";
 
     MachineID OriginalRequestor, desc="Only used in back-invalidation case to check who is the original requestor";
 

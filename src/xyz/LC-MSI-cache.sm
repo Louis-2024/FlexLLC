@@ -84,6 +84,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
 
     // Responses from other caches
     DataOwner,      desc="Data from owner";
+    DataSharer, desc="";
     InvAck,         desc="Invalidation ack from other cache after Inv";
 
     // Special event to simplify implementation
@@ -247,6 +248,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
           }
       }
   }
+
   in_port(response_in, ResponseMsg, responseFromDirOrSibling) {
       if (response_in.isReady(clockEdge())) {
           peek(response_in, ResponseMsg) { // in_msg is implied
@@ -269,8 +271,11 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                   }
               } else {
                   if (in_msg.Type == CoherenceResponseType:Data) {
-                      trigger(Event:DataOwner, in_msg.addr, cache_entry,
-                              tbe);
+                      if (in_msg.UpgradeToM) {
+                          trigger(Event:DataOwner, in_msg.addr, cache_entry, tbe);
+                      } else {
+                          trigger(Event:DataSharer, in_msg.addr, cache_entry, tbe);
+                      }
                   } else if (in_msg.Type == CoherenceResponseType:InvAck) {
                       DPRINTF(RubySlicc, "Got inv ack. %d left\n",
                               tbe.AcksOutstanding);
@@ -354,10 +359,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     }
   }
 
-  action(guardSplitBus, "isSB", desc="Guard that this transition only happens in a split bus setup") {
-    assert(splitBus);
-  }
-
   action(sendGetS, 'gS', desc="Send GetS to the directory") {
     enqueue(request_out, RequestMsg, 1) {
       // address, cache_entry, tbe
@@ -409,28 +410,10 @@ machine(MachineType:L1Cache, "LC-MSI cache")
           out_msg.isWritebackRequest := true;
       }
   }
-  action(sendCacheDataToReq, "cdR", desc="Send cache data to requestor") {
-    assert(is_valid(cache_entry));
-    // in_message & out_message
-    peek(forward_in, RequestMsg) {
-        // if we are targeting bus
-        // if(machineIDToMachineType(in_msg.Requestor) == MachineType::Directory) {
-        if(splitBus && (machineIDToMachineType(in_msg.Requestor) == MachineType:Directory) ) {
-          // This only happens in GetM
-          enqueue(response_out_bus, ResponseMsg, 1) {
-              out_msg.addr := address;
-              out_msg.Type := CoherenceResponseType:Data;
-              out_msg.Destination.add(in_msg.Requestor);
-              out_msg.DataBlk := cache_entry.DataBlk;
-              out_msg.MessageSize := MessageSizeType:Data;
-              out_msg.Sender := machineID;
-              // used in the TDMSwitch for response aribtration
-              out_msg.OriginalRequestor := in_msg.OriginalRequestor;
 
-              DPRINTF(RubySlicc, "in_msg: %s\n", in_msg);
-              DPRINTF(RubySlicc, "out_msg: %s\n", out_msg);
-          }
-        } else {
+  action(sendCacheDataToReqAsM, desc="") {
+      assert(is_valid(cache_entry));
+      peek(forward_in, RequestMsg) {
           enqueue(response_out, ResponseMsg, 1) {
               out_msg.addr := address;
               out_msg.Type := CoherenceResponseType:Data;
@@ -438,10 +421,26 @@ machine(MachineType:L1Cache, "LC-MSI cache")
               out_msg.DataBlk := cache_entry.DataBlk;
               out_msg.MessageSize := MessageSizeType:Data;
               out_msg.Sender := machineID;
+              out_msg.UpgradeToM := true;
           }
-        }
-    }
+      }
   }
+
+  action(sendCacheDataToReqAsS, desc="") {
+      assert(is_valid(cache_entry));
+      peek(forward_in, RequestMsg) {
+          enqueue(response_out, ResponseMsg, 1) {
+              out_msg.addr := address;
+              out_msg.Type := CoherenceResponseType:Data;
+              out_msg.Destination.add(in_msg.Requestor);
+              out_msg.DataBlk := cache_entry.DataBlk;
+              out_msg.MessageSize := MessageSizeType:Data;
+              out_msg.Sender := machineID;
+              out_msg.UpgradeToM := false;
+          }
+      }
+  }
+
   // M, only used in FwdGetS
   action(sendCacheDataToDir, "cdD", desc="Send the cache data to the dir") {
     if(splitBus) {
@@ -807,6 +806,15 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     kd_wakeUpDependents;
   }
 
+    transition(IS_D, DataSharer, S) {
+        toc;
+        writeDataToCache;
+        deallocateTBE;
+        externalLoadHit;
+        popResponseQueue;
+        kd_wakeUpDependents;
+    }
+
   transition(IS_D, DataDirNoAcks, S) {
     toc;
     writeDataToCacheFromDir;
@@ -960,13 +968,19 @@ transition({SM_AD, SM_A}, {Store, Replacement}) {
   // PMSI* fix
   transition(M, {FwdGetM, FwdGetS}, I) {
       // sendInvToL0;
-      sendCacheDataToReq;  // could send to directory, or the requestor
+      sendCacheDataToReqAsM;  // could send to directory, or the requestor
       deallocateCacheBlock;
       popForwardQueue;
   }
 
   transition(S, FwdGetS) {
-      sendCacheDataToReq;
+      sendCacheDataToReqAsS;
+      popForwardQueue;
+  }
+
+  transition(S, FwdGetM, I) {
+      sendCacheDataToReqAsM;
+      deallocateCacheBlock;
       popForwardQueue;
   }
 
@@ -975,14 +989,14 @@ transition({SM_AD, SM_A}, {Store, Replacement}) {
   }
 
   transition(MI_A, FwdGetS, SI_A) {
-      sendCacheDataToReq;
+      sendCacheDataToReqAsM;
       sendCacheDataToDir;
       popForwardQueue;
       // kd_wakeUpDependents;
   }
 
   transition(MI_A, FwdGetM, II_A) {
-      sendCacheDataToReq;
+      sendCacheDataToReqAsM;
       popForwardQueue;
       // kd_wakeUpDependents;
   }
