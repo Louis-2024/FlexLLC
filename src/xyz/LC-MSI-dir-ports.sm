@@ -21,18 +21,6 @@
         }
     }
 
-    in_port(response_in, ResponseMsg, responseFromCache) {
-        if (response_in.isReady(clockEdge())) {
-            peek(response_in, ResponseMsg) {
-                Entry e := getCacheEntry(in_msg.addr);
-                TBE tbe := TBEs[in_msg.addr];
-
-                // TODO
-                assert(false);
-            }
-        }
-    }
-
     in_port(request_in, RequestMsg, requestFromCache) {
         if (request_in.isReady(clockEdge())) {
             peek(request_in, RequestMsg) {
@@ -41,26 +29,44 @@
 
                 if(in_msg.Type == CoherenceRequestType:GetS) {
 
-                    if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr) || xyzCacheMemory.containLLCLine(in_msg.addr)) {
-                        // fetch as IN
+                    if (xyzCacheMemory.containLLCLine(in_msg.addr)) {
                         DPRINTF(FlexLLC, "GetS: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                         trigger(Event:GetS, in_msg.addr, e, tbe);
-                    } else {
-                        // fetch as NI
+                    } else if (xyzCacheMemory.containNILine(in_msg.addr)) {
                         DPRINTF(FlexLLC, "GetS_NI: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                         trigger(Event:GetS_NI, in_msg.addr, e, tbe);
+                    } else {
+                        if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
+                            DPRINTF(FlexLLC, "GetS: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:GetS, in_msg.addr, e, tbe);
+                        } else {
+                            DPRINTF(FlexLLC, "GetS_NI: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:GetS_NI, in_msg.addr, e, tbe);
+                        }
                     }
 
                 } else if (in_msg.Type == CoherenceRequestType:GetM) {
                     
-                    if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr) || xyzCacheMemory.containLLCLine(in_msg.addr)) {
-                        // fetch as IN
+                    if (xyzCacheMemory.containLLCLine(in_msg.addr)) {
                         DPRINTF(FlexLLC, "GetM: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                         trigger(Event:GetM, in_msg.addr, e, tbe);
+                    } else if (xyzCacheMemory.containNILine(in_msg.addr)) {
+                        if (xyzCacheMemory.getSharers(in_msg.addr).isElement(in_msg.Requestor)) {
+                            // scenario where requestor holds target line in S, and wants to upgrade to M
+                            DPRINTF(FlexLLC, "GetM_NI_From_Sharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:GetM_NI_From_Sharer, in_msg.addr, e, tbe);
+                        } else {
+                            DPRINTF(FlexLLC, "GetM_NI_From_NonSharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:GetM_NI_From_NonSharer, in_msg.addr, e, tbe);
+                        }
                     } else {
-                        // fetch as NI
-                        DPRINTF(FlexLLC, "GetM_NI: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                        trigger(Event:GetM_NI, in_msg.addr, e, tbe);
+                        if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
+                            DPRINTF(FlexLLC, "GetM: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:GetM, in_msg.addr, e, tbe);
+                        } else {
+                            DPRINTF(FlexLLC, "GetM_NI_From_NonSharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:GetM_NI_From_NonSharer, in_msg.addr, e, tbe);
+                        }
                     }
 
                 } else if (in_msg.Type == CoherenceRequestType:PutS) {
@@ -88,7 +94,6 @@
                                 assert(false);
                             }
                         }
-
                     } else if (xyzCacheMemory.containNILine(in_msg.addr)) {
                         // evict NI
                         if (xyzCacheMemory.getIsDirty(in_msg.addr)) {

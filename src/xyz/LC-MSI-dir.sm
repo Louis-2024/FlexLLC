@@ -58,7 +58,8 @@ MessageBuffer *responseFromMemory;
         GetM, desc="";
 
         GetS_NI, desc="";
-        GetM_NI, desc="";
+        GetM_NI_From_NonSharer, desc="";
+        GetM_NI_From_Sharer, desc="";
 
         PutS_NotLastCopy, desc="";
         PutS_LastCopy_Clean, desc="";
@@ -79,7 +80,6 @@ MessageBuffer *responseFromMemory;
 
         MemData, desc="";
         MemAck, desc="";
-        CacheData, desc="";
     }
 
     // structures
@@ -279,6 +279,18 @@ MessageBuffer *responseFromMemory;
         }
     }
 
+    action(sendUpgradeToReq, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(forward_out, RequestMsg, 1) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceRequestType:Upgrade;
+                out_msg.Requestor := in_msg.Requestor;
+                out_msg.Destination.add(in_msg.Requestor);
+                out_msg.MessageSize := MessageSizeType:Control;
+            }
+        }
+    }
+
     action(sendLLCDataToReq, desc="") {
         assert(is_valid(cache_entry));
         peek(request_in, RequestMsg) {
@@ -339,14 +351,6 @@ MessageBuffer *responseFromMemory;
 
     action(copyRequestDataToLLC, desc="") {
         peek(request_in, RequestMsg) {      
-            assert(is_valid(cache_entry));
-            cache_entry.DataBlk := in_msg.DataBlk;
-        }
-    }
-
-    // maybe we don't need this
-    action(copyResponseDataToLLC, desc="") {
-        peek(response_in, ResponseMsg) {      
             assert(is_valid(cache_entry));
             cache_entry.DataBlk := in_msg.DataBlk;
         }
@@ -487,9 +491,7 @@ MessageBuffer *responseFromMemory;
     }
     
     action(xyzDeallocateMetadataNI, desc="") {
-        peek(request_in, RequestMsg) {
-            xyzCacheMemory.removeLineFromNIDirectory(in_msg.addr);
-        }
+        xyzCacheMemory.removeLineFromNIDirectory(address);
     }
 
     // transitions
@@ -648,7 +650,7 @@ MessageBuffer *responseFromMemory;
         popRequestQueue;
     }
 
-    transition(I, GetM_NI, I_to_M_await_mem_data_NI) {
+    transition(I, GetM_NI_From_NonSharer, I_to_M_await_mem_data_NI) {
         xyzAddOwnerNI;
         xyzSetIsDirty;
         setNITransientStateTo_I_to_M_await_mem_data_NI;
@@ -705,18 +707,29 @@ MessageBuffer *responseFromMemory;
 
     transition(S_NI, GetS_NI) {
         sendFwdGetS;
-        xyzAddSharer;
+        xyzAddSharerNI;
         popRequestQueue;
         markLLCDone;
     }
 
-    transition(S_NI, GetM_NI, M_NI) {
+    transition(S_NI, GetM_NI_From_NonSharer, M_NI) {
         sendFwdGetMFromS;
         xyzRemoveSharer;
         sendInvToSharers;
         xyzClearSharers;
         xyzAddOwnerNI;
         xyzSetIsDirty;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    transition(S_NI, GetM_NI_From_Sharer, M_NI) {
+        xyzRemoveSharer;
+        sendInvToSharers;
+        xyzClearSharers;
+        xyzAddOwnerNI;
+        xyzSetIsDirty;
+        sendUpgradeToReq;
         popRequestQueue;
         markLLCDone;
     }
@@ -731,7 +744,7 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
     
-    transition(M_NI, GetM_NI) {
+    transition(M_NI, GetM_NI_From_NonSharer) {
         sendFwdGetMFromM;
         xyzClearOwner;
         xyzAddOwnerNI;

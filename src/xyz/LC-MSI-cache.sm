@@ -90,6 +90,9 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     LastInvAck,     desc="Triggered after the last ack is received";
 
     WB_Data,        desc="";
+
+    // FlexLLC
+    Upgrade,        desc="";
   }
   structure(Entry, desc="Cache entry", interface="AbstractCacheEntry") {
     State CacheState,        desc="cache state";
@@ -300,6 +303,8 @@ machine(MachineType:L1Cache, "LC-MSI cache")
             trigger(Event:Inv, in_msg.addr, cache_entry, tbe);
         } else if (in_msg.Type == CoherenceRequestType:PutAck) {
             trigger(Event:PutAck, in_msg.addr, cache_entry, tbe);
+        } else if (in_msg.Type == CoherenceRequestType:Upgrade) {
+            trigger(Event:Upgrade, in_msg.addr, cache_entry, tbe);
         } else {
             error("Unexpected forward message!");
         }
@@ -960,6 +965,11 @@ transition({SM_AD, SM_A}, {Store, Replacement}) {
       popForwardQueue;
   }
 
+  transition(S, FwdGetS) {
+      sendCacheDataToReq;
+      popForwardQueue;
+  }
+
   transition({MI_A, SI_A, II_A, MP_D}, {Load, Store, Replacement}) {
       stall;
   }
@@ -1007,5 +1017,12 @@ transition({SM_AD, SM_A}, {Store, Replacement}) {
 
   transition({I,M,S,SI_A,II_A,SM_AD,IM_AD,IM_A,SM_A,MI_A}, Stall) {
     stall;
+  }
+
+  transition(SM_AD, Upgrade, M_P) {
+    deallocateTBE;
+    externalStoreHit;
+    popForwardQueue;
+    kd_wakeUpDependents;
   }
 }
