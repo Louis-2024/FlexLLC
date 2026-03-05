@@ -37,6 +37,8 @@ structure (XYZCacheMemory, external = "yes") {
     bool checkResourceAvailable(CacheResourceType, Addr);
     Addr addressToCacheSet(Addr);
 
+    void printMetadata(Addr);
+
     NetDest getOwner(Addr);
     NetDest getASharer(Addr);
     NetDest getSharers(Addr);

@@ -80,6 +80,7 @@ MessageBuffer *responseFromMemory;
 
         MemData, desc="";
         MemAck, desc="";
+        InvAck, desc="";
     }
 
     // structures
@@ -204,6 +205,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.MessageSize := MessageSizeType:Request_Control;
                 out_msg.Len := 0;
             }
+            DPRINTF(FlexLLC, "[SendMemRead: Address = %#x, Sender = %s] \n", address, in_msg.Requestor);
         }
     }
 
@@ -217,6 +219,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.DataBlk := in_msg.DataBlk;
                 out_msg.Len := 0;
             }
+            DPRINTF(FlexLLC, "[SendDataToMem: Address = %#x, Sender = %s] \n", address, in_msg.Requestor);
         }
     }
 
@@ -229,9 +232,10 @@ MessageBuffer *responseFromMemory;
             out_msg.DataBlk := cache_entry.DataBlk;
             out_msg.Len := 0;
         }
+        DPRINTF(FlexLLC, "[SendLLCDataToMem: Address = %#x, Sender = %s] \n", address, machineID);
     }
 
-    action(sendInvToSharers, desc="") {
+    action(sendInvToSharersFromReq, desc="") {
         peek(request_in, RequestMsg) {
             enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
@@ -240,30 +244,48 @@ MessageBuffer *responseFromMemory;
                 out_msg.Destination := xyzCacheMemory.getSharers(address);
                 out_msg.MessageSize := MessageSizeType:Control;
             }
+            DPRINTF(FlexLLC, "[sendInvToSharersFromReq: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, xyzCacheMemory.getSharers(address));
+        }
+    }
+
+    action(sendInvToSharersFromLLC, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(forward_out, RequestMsg, 1) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceRequestType:Inv;
+                out_msg.Requestor := machineID;
+                out_msg.Destination := xyzCacheMemory.getSharers(address);
+                out_msg.MessageSize := MessageSizeType:Control;
+            }
+            DPRINTF(FlexLLC, "[sendInvToSharersFromLLC: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, xyzCacheMemory.getSharers(address));
         }
     }
 
     action(sendFwdGetS, desc="") {
         peek(request_in, RequestMsg) {
+            NetDest dest := xyzCacheMemory.getASharer(address);
             enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
                 out_msg.Type := CoherenceRequestType:GetS;
                 out_msg.Requestor := in_msg.Requestor;
-                out_msg.Destination := xyzCacheMemory.getASharer(address);
+                out_msg.Destination := dest;
                 out_msg.MessageSize := MessageSizeType:Control;
             }
+            DPRINTF(FlexLLC, "[SendFwdGetS: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, dest);
         }
     }
 
     action(sendFwdGetMFromM, desc="") {
         peek(request_in, RequestMsg) {
+            NetDest dest := xyzCacheMemory.getOwner(address);
             enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
                 out_msg.Type := CoherenceRequestType:GetM;
                 out_msg.Requestor := in_msg.Requestor;
-                out_msg.Destination := xyzCacheMemory.getOwner(address);
+                out_msg.Destination := dest;
                 out_msg.MessageSize := MessageSizeType:Control;
             }
+            DPRINTF(FlexLLC, "[SendFwdGetMFromM: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, dest);
         }
     }
 
@@ -278,6 +300,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.MessageSize := MessageSizeType:Control;
             }
             xyzCacheMemory.removeSharer(address, dest.smallestElement());
+            DPRINTF(FlexLLC, "[SendFwdGetMFromS: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, dest);
         }
     }
 
@@ -290,6 +313,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.Destination.add(in_msg.Requestor);
                 out_msg.MessageSize := MessageSizeType:Control;
             }
+            DPRINTF(FlexLLC, "[SendUpgradeToReq: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, in_msg.Requestor);
         }
     }
 
@@ -311,6 +335,7 @@ MessageBuffer *responseFromMemory;
                 }
                 xyzCacheMemory.setMRU(cache_entry);
             }
+             DPRINTF(FlexLLC, "[SendLLCDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.Requestor, machineID, in_msg.Requestor);
         }
     }
 
@@ -330,6 +355,7 @@ MessageBuffer *responseFromMemory;
                     out_msg.Acks := 0;
                 }
             }
+            DPRINTF(FlexLLC, "[SendMemDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.OriginalRequestorMachId, machineID, in_msg.OriginalRequestorMachId);
         }
     }
 
@@ -342,14 +368,11 @@ MessageBuffer *responseFromMemory;
                 out_msg.Destination.add(in_msg.Requestor);
                 out_msg.MessageSize := MessageSizeType:Control;
             }
+            DPRINTF(FlexLLC, "[sendPutAck: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, in_msg.Requestor);
         }
     }
 
     // functional actions
-
-    action(assertFalse, desc="") {
-        assert(false);
-    }
 
     action(copyRequestDataToLLC, desc="") {
         peek(request_in, RequestMsg) {      
@@ -437,8 +460,12 @@ MessageBuffer *responseFromMemory;
     action(popRequestQueue, desc="") {
         request_in.dequeue(clockEdge());
     }
+    
+    action(popResponseQueue, desc="") {
+        response_in.dequeue(clockEdge());
+    }
 
-    action(popMemQueue, "pM", desc="Pop the memory queue") {
+    action(popMemQueue, desc="") {
         memQueue_in.dequeue(clockEdge());
     }
 
@@ -497,6 +524,10 @@ MessageBuffer *responseFromMemory;
     }
 
     // transitions
+
+    transition({M_NI, S_NI}, InvAck) {
+        popResponseQueue;
+    }
 
     // 1. transitions from LOC / LOD
 
@@ -568,7 +599,7 @@ MessageBuffer *responseFromMemory;
 
     transition(S, GetM, M) {
         xyzRemoveSharer;
-        sendInvToSharers;
+        sendInvToSharersFromReq;
         xyzAddOwner;
         xyzSetIsDirty;
         sendLLCDataToReq;
@@ -716,7 +747,7 @@ MessageBuffer *responseFromMemory;
 
     transition(S_NI, GetM_NI_From_NonSharer, M_NI) {
         sendFwdGetMFromS;
-        sendInvToSharers;
+        sendInvToSharersFromLLC;
         xyzClearSharers;
         xyzAddOwnerNI;
         xyzSetIsDirty;
@@ -726,7 +757,7 @@ MessageBuffer *responseFromMemory;
 
     transition(S_NI, GetM_NI_From_Sharer, M_NI) {
         xyzRemoveSharer;
-        sendInvToSharers;
+        sendInvToSharersFromLLC;
         xyzClearSharers;
         xyzAddOwnerNI;
         xyzSetIsDirty;

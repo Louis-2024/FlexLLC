@@ -973,7 +973,7 @@ transition({SM_AD, SM_A}, {Store, Replacement}) {
       popForwardQueue;
   }
 
-  transition(S, FwdGetS) {
+  transition({S, SI_A}, FwdGetS) {
       sendCacheDataToReqAsS;
       popForwardQueue;
   }

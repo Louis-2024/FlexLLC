@@ -35,6 +35,12 @@ public:
     virtual AbstractCacheEntry* allocate(Addr address, AbstractCacheEntry* new_entry);
     virtual void deallocate(Addr address);
 
+    void printMetadata(Addr address) {
+        if (containLLCLine(address) || containNILine(address)) {
+            DPRINTF(FlexLLC, "{Address = %#x, #Sharers = %d, #Owner = %d, isDirty = %d} \n", address, getSharers(address).count(), getOwner(address).count(), getIsDirty(address));
+        }
+    }
+
     // NetDest operations
 
     NetDest getOwner(Addr address) {
