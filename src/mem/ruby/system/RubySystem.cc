@@ -552,6 +552,7 @@ RubySystem::functionalRead(PacketPtr pkt)
         ctrl_backing_store->functionalRead(line_address, pkt);
         return true;
     } else if (num_ro > 0 || num_rw >= 1) {
+        /*
         if (num_rw > 1) {
             // We iterate over the vector of abstract controllers, and return
             // the first copy found. If we have more than one cache with block
@@ -559,6 +560,7 @@ RubySystem::functionalRead(PacketPtr pkt)
             warn("More than one Abstract Controller with RW permission for "
                  "addr: %#x on cacheline: %#x.", address, line_address);
         }
+        */
         // In Broadcast/Snoop protocols, this covers if you know the block
         // exists somewhere in the caching hierarchy, then you want to read any
         // valid RO or RW block.  In directory protocols, same thing, you want
