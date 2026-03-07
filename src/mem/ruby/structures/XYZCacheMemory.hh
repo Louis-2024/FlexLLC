@@ -38,6 +38,8 @@ public:
     void printMetadata(Addr address) {
         if (containLLCLine(address) || containNILine(address)) {
             DPRINTF(FlexLLC, "{Address = %#x, #Sharers = %d, #Owner = %d, isDirty = %d} \n", address, getSharers(address).count(), getOwner(address).count(), getIsDirty(address));
+        } else {
+            DPRINTF(FlexLLC, "{Address = %#x} \n", address);
         }
     }
 
@@ -248,6 +250,7 @@ public:
         MetadataPerLine target_line = NI_directory[set_index].metadata_per_set[address];
         LLC_directory[set_index].metadata_per_set[address] = target_line;
         NI_directory[set_index].metadata_per_set.erase(address);
+        assert((containLLCLine(address)) && (!containNILine(address)));
     }
 
     void convertINLineToNI(Addr address) {
@@ -257,6 +260,7 @@ public:
         MetadataPerLine target_line = LLC_directory[set_index].metadata_per_set[address];
         NI_directory[set_index].metadata_per_set[address] = target_line;
         LLC_directory[set_index].metadata_per_set.erase(address);
+        assert((!containLLCLine(address)) && (containNILine(address)));
     }
 
     void removeLineFromLLCDirectory(Addr address) {

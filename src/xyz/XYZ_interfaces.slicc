@@ -60,4 +60,5 @@ structure (XYZCacheMemory, external = "yes") {
     int getNIState(Addr);
     void setNITransientState(Addr, int);
     void removeLineFromNIDirectory(Addr);
+    void convertNILineToIN(Addr);
 }

@@ -35,7 +35,7 @@ MessageBuffer *responseFromMemory;
         LOD, AccessPermission:Read_Write, desc="LLC_Only_Dirty";
         
         M_NI, AccessPermission:Invalid, desc="";
-        S_NI, AccessPermission:Read_Only, desc="";
+        S_NI, AccessPermission:Invalid, desc="";
 
         // transient states
         I_to_S_await_mem_data, AccessPermission:Busy, desc="";
@@ -68,6 +68,7 @@ MessageBuffer *responseFromMemory;
         PutM, desc="";
         PutM_WriteThrough, desc="";
         PutLOD, desc="";
+        Put_InvalidReq, dest="";
 
         PutS_NotLastCopy_NI_BypassLLC, desc="";
         PutS_NotLastCopy_NI_InsertToLLC, desc="";
@@ -158,6 +159,9 @@ MessageBuffer *responseFromMemory;
         if (is_valid(e)) {
             return Directory_State_to_permission(e.DirState);
         }
+        if (xyzCacheMemory.containNILine(addr)) {
+            return AccessPermission:Invalid;
+        }
         return AccessPermission:Read_Write;
     }
 
@@ -172,7 +176,7 @@ MessageBuffer *responseFromMemory;
         if(is_valid(e)) {
             testAndRead(addr, e.DataBlk, pkt);
         } else {
-          functionalMemoryRead(pkt);
+            functionalMemoryRead(pkt);
         }
     }
 
@@ -335,7 +339,7 @@ MessageBuffer *responseFromMemory;
                 }
                 xyzCacheMemory.setMRU(cache_entry);
             }
-             DPRINTF(FlexLLC, "[SendLLCDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.Requestor, machineID, in_msg.Requestor);
+            DPRINTF(FlexLLC, "[SendLLCDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.Requestor, machineID, in_msg.Requestor);
         }
     }
 
@@ -457,6 +461,10 @@ MessageBuffer *responseFromMemory;
         }
     }
 
+    action(xyzConvertNILineToIN, desc="") {
+        xyzCacheMemory.convertNILineToIN(address);
+    }
+
     action(popRequestQueue, desc="") {
         request_in.dequeue(clockEdge());
     }
@@ -527,6 +535,12 @@ MessageBuffer *responseFromMemory;
 
     transition({M_NI, S_NI}, InvAck) {
         popResponseQueue;
+    }
+
+    transition({S, S_NI, M, M_NI}, Put_InvalidReq) {
+        sendPutAck;
+        popRequestQueue;
+        markLLCDone;
     }
 
     // 1. transitions from LOC / LOD
@@ -722,9 +736,29 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
+    transition(S_NI, PutS_NotLastCopy_NI_InsertToLLC, S) {
+        sendPutAck;
+        xyzRemoveSharer;
+        allocateCacheBlock;
+        copyRequestDataToLLC;
+        xyzConvertNILineToIN;
+        popRequestQueue;
+        markLLCDone;
+    }
+
     transition(S_NI, PutS_LastCopy_Clean_NI_BypassLLC, I) {
         sendPutAck;
         xyzDeallocateMetadataNI;
+        popRequestQueue;
+        markLLCDone;
+    }
+
+    transition(S_NI, PutS_LastCopy_Clean_NI_InsertToLLC, LOC) {
+        sendPutAck;
+        xyzRemoveSharer;
+        allocateCacheBlock;
+        copyRequestDataToLLC;
+        xyzConvertNILineToIN;
         popRequestQueue;
         markLLCDone;
     }
@@ -736,6 +770,16 @@ MessageBuffer *responseFromMemory;
         xyzRemoveSharer;
         setNITransientStateTo_DirtyNI_to_I_await_ack;
         popRequestQueue;
+    }
+
+    transition(S_NI, PutS_LastCopy_Dirty_NI_InsertToLLC, LOD) {
+        sendPutAck;
+        xyzRemoveSharer;
+        allocateCacheBlock;
+        copyRequestDataToLLC;
+        xyzConvertNILineToIN;
+        popRequestQueue;
+        markLLCDone;
     }
 
     transition(S_NI, GetS_NI) {
@@ -791,6 +835,16 @@ MessageBuffer *responseFromMemory;
         sendPutAck;
         xyzClearOwner;
         popRequestQueue;
+    }
+
+    transition(M_NI, PutM_NI_InsertToLLC, LOD) {
+        sendPutAck;
+        xyzClearOwner;
+        allocateCacheBlock;
+        copyRequestDataToLLC;
+        xyzConvertNILineToIN;
+        popRequestQueue;
+        markLLCDone;
     }
 
 }

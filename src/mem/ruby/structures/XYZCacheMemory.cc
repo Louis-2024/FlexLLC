@@ -22,17 +22,10 @@ AbstractCacheEntry* XYZCacheMemory::allocate(Addr address, AbstractCacheEntry *e
     } else if (existLLCOnlyCleanLinePerSet(address)) {
         // 1. locate LLC only clean line in the set
         Addr victim_address = getLRULLCOnlyCleanLinePerSet(address);
-        AbstractCacheEntry* victim_entry = lookup(victim_address);
-        uint32_t target_set = victim_entry->getSet();
-        uint32_t target_way = victim_entry->getWay();
-        assert(target_set == addressToCacheSet(address));
         // 2. deallocate it 
-        assert(m_cache[target_set][target_way] != nullptr);
-        deallocate(victim_entry->m_Address);
-        assert(m_cache[target_set][target_way] == nullptr);
+        deallocate(victim_address);
         // 3. allocate new line
         new_entry = CacheMemory::allocate(address, entry);
-        assert(m_cache[target_set][target_way] != nullptr);
         assert(lookup(address) != nullptr);
     } else {
         assert(false);
