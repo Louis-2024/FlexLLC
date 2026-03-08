@@ -40,17 +40,11 @@ MessageBuffer *responseFromMemory;
         // transient states
         I_to_S_await_mem_data, AccessPermission:Busy, desc="";
         I_to_M_await_mem_data, AccessPermission:Busy, desc="";
-        LOD_to_LOC_await_ack, AccessPermission:Busy, desc="";
-        
-        S_await_cache_data, AccessPermission:Busy, desc="";
-        M_await_cache_data, AccessPermission:Busy, desc="";
+        LOD_to_LOC_await_ack, AccessPermission:Read_Only, desc="";
 
         I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
         I_to_M_await_mem_data_NI, AccessPermission:Busy, desc="";
         DirtyNI_to_I_await_ack, AccessPermission:Busy, desc="";
-
-        S_NI_await_cache_data, AccessPermission:Busy, desc="";
-        M_NI_await_cache_data, AccessPermission:Busy, desc="";
     }
 
     enumeration(Event, desc="Directory events") {
@@ -121,25 +115,30 @@ MessageBuffer *responseFromMemory;
     Cycles curCycle();
     Cycles ticksToCycles(Tick t);
     void wakeUpAllBuffers();
-    
+
+    State getNIState(Addr addr) {
+        assert(xyzCacheMemory.containNILine(addr));
+        // if the line is IN, state should be decided by XYZCacheMemory
+        if (xyzCacheMemory.getNIState(addr) == 1) {
+            return State:S_NI;
+        } else if (xyzCacheMemory.getNIState(addr) == 2) {
+            return State:M_NI;
+        } else if (xyzCacheMemory.getNIState(addr) == 3) {
+            return State:I_to_S_await_mem_data_NI;
+        } else if (xyzCacheMemory.getNIState(addr) == 4) {
+            return State:I_to_M_await_mem_data_NI;
+        } else if (xyzCacheMemory.getNIState(addr) == 5) {
+            return State:DirtyNI_to_I_await_ack;
+        }
+    }
+
     State getState(TBE tbe, Entry cache_entry, Addr addr) {
         if(is_valid(tbe)) {
             return tbe.TBEState;
         } else if(is_valid(cache_entry)) {
             return cache_entry.DirState;
         } else if (xyzCacheMemory.containNILine(addr)) {
-            // if the line is IN, state should be decided by XYZCacheMemory
-            if (xyzCacheMemory.getNIState(addr) == 1) {
-                return State:S_NI;
-            } else if (xyzCacheMemory.getNIState(addr) == 2) {
-                return State:M_NI;
-            } else if (xyzCacheMemory.getNIState(addr) == 3) {
-                return State:I_to_S_await_mem_data_NI;
-            } else if (xyzCacheMemory.getNIState(addr) == 4) {
-                return State:I_to_M_await_mem_data_NI;
-            } else if (xyzCacheMemory.getNIState(addr) == 5) {
-                return State:DirtyNI_to_I_await_ack;
-            }
+            return getNIState(addr);
         }
         return State:I;
     }
@@ -159,9 +158,9 @@ MessageBuffer *responseFromMemory;
         if (is_valid(e)) {
             return Directory_State_to_permission(e.DirState);
         }
-        // for NI lines, it's ok for Directory to have RW AccessPermission,
-        // because Ruby will select the controller in the order of L1 -> L2 -> Directory
-        // for NI lines, Directory always has the lowest priority, so won't actually matter
+        if (xyzCacheMemory.containNILine(addr)) {
+            return Directory_State_to_permission(getNIState(addr));
+        }
         return AccessPermission:Read_Write;
     }
 

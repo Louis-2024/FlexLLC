@@ -239,7 +239,6 @@ public:
         } else {
             return NI_directory[set_index].metadata_per_set[address].NI_transient_state;
         }
-        assert(false);
         return 0;
     }
 
