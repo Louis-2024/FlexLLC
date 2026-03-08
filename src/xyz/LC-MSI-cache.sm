@@ -3,7 +3,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     CacheMemory *cacheMemory;
     XYZStatsObject *xyzStatsObject;
     Cycles responseBusLatency := 1;
-    bool splitBus;
 
     MessageBuffer * requestFromL0,  network="From", virtual_network="4", vnet_type="prv_req";
     MessageBuffer * forwardToL0,    network="To", virtual_network="4", vnet_type="prv_req";
@@ -15,8 +14,12 @@ machine(MachineType:L1Cache, "LC-MSI cache")
 
     MessageBuffer * forwardFromDir, network="From", virtual_network="1", vnet_type="forward";
     MessageBuffer * responseFromDirOrSibling, network="From", virtual_network="2", vnet_type="response";
+
+    // We don't need these channels for FlexLLC...
+    bool splitBus;
     MessageBuffer * responseToDirOnly, network="To", virtual_network="6", vnet_type="response";
     MessageBuffer * responseFromDirOnly, network="From", virtual_network="6", vnet_type="response";
+    // ... but deleting them causes errors
 
 {
   state_declaration(State, desc="Cache states") {
@@ -195,10 +198,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   out_port(request_out, RequestMsg, requestToDir);
   out_port(forwardToL0_out, RequestMsg, forwardToL0);
   out_port(responseToL0_out, ResponseMsg, responseToL0);
-
   out_port(response_out, ResponseMsg, responseToDirOrSibling);
-  out_port(response_out_bus, ResponseMsg, responseToDirOnly);
-
 
   in_port(responseFromL0_in, ResponseMsg, responseFromL0) {
     if(responseFromL0_in.isReady(clockEdge())) {
@@ -220,32 +220,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
         }
     }
   }
-  
-  // in_port
-  in_port(response_in_bus, ResponseMsg, responseFromDirOnly) {
-      if (response_in_bus.isReady(clockEdge())) {
-          peek(response_in_bus, ResponseMsg) { // in_msg is implied
-              Entry cache_entry := getCacheEntry(in_msg.addr);
-              TBE tbe := TBEs[in_msg.addr];
-              assert(is_valid(tbe));
-
-              if (machineIDToMachineType(in_msg.Sender) ==
-                          MachineType:Directory) {
-                  if (in_msg.Type != CoherenceResponseType:Data) {
-                      error("Directory should only reply with data");
-                  }
-                  assert(in_msg.Acks + tbe.AcksOutstanding >= 0);
-                  if (in_msg.Acks + tbe.AcksOutstanding == 0) {
-                      trigger(Event:DataDirNoAcks, in_msg.addr, cache_entry,
-                              tbe);
-                  } else {
-                      trigger(Event:DataDirAcks, in_msg.addr, cache_entry,
-                              tbe);
-                  }
-              }
-          }
-      }
-  }
 
   in_port(response_in, ResponseMsg, responseFromDirOrSibling) {
       if (response_in.isReady(clockEdge())) {
@@ -259,21 +233,22 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                   if (in_msg.Type != CoherenceResponseType:Data) {
                       error("Directory should only reply with data");
                   }
-                  assert(in_msg.Acks + tbe.AcksOutstanding >= 0);
                   if (in_msg.Acks + tbe.AcksOutstanding == 0) {
-                      trigger(Event:DataDirNoAcks, in_msg.addr, cache_entry,
-                              tbe);
+                      trigger(Event:DataDirNoAcks, in_msg.addr, cache_entry, tbe);
+                  } else if (in_msg.Acks + tbe.AcksOutstanding > 0) {
+                      trigger(Event:DataDirAcks, in_msg.addr, cache_entry, tbe);
                   } else {
-                      trigger(Event:DataDirAcks, in_msg.addr, cache_entry,
-                              tbe);
+                      assert(false);
                   }
               } else {
                   if (in_msg.Type == CoherenceResponseType:Data) {
                       if (in_msg.UpgradeToM) {
-                          if (in_msg.Acks == 0) {
+                          if (in_msg.Acks + tbe.AcksOutstanding == 0) {
                               trigger(Event:OwnerDataNoAcks, in_msg.addr, cache_entry, tbe);
-                          } else {
+                          } else if (in_msg.Acks + tbe.AcksOutstanding > 0) {
                               trigger(Event:OwnerDataAcks, in_msg.addr, cache_entry, tbe);
+                          } else {
+                              assert(false);
                           }
                       } else {
                           trigger(Event:SharerData, in_msg.addr, cache_entry, tbe);
@@ -282,11 +257,9 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                       DPRINTF(RubySlicc, "Got inv ack. %d left\n",
                               tbe.AcksOutstanding);
                       if (tbe.AcksOutstanding == 1) {
-                          trigger(Event:LastInvAck, in_msg.addr, cache_entry,
-                                  tbe);
+                          trigger(Event:LastInvAck, in_msg.addr, cache_entry, tbe);
                       } else {
-                          trigger(Event:InvAck, in_msg.addr, cache_entry,
-                                  tbe);
+                          trigger(Event:InvAck, in_msg.addr, cache_entry, tbe);
                       }
                   } else {
                       error("Unexpected response from other cache");
@@ -313,8 +286,10 @@ machine(MachineType:L1Cache, "LC-MSI cache")
         } else if (in_msg.Type == CoherenceRequestType:Upgrade) {
             if (in_msg.Acks + tbe.AcksOutstanding == 0) {
                 trigger(Event:UpgradeNoAcks, in_msg.addr, cache_entry, tbe);
-            } else {
+            } else if (in_msg.Acks + tbe.AcksOutstanding > 0) {
                 trigger(Event:UpgradeAcks, in_msg.addr, cache_entry, tbe);
+            } else {
+                assert(false);
             }
         } else {
             error("Unexpected forward message!");
@@ -460,8 +435,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   action(decrAcks, "da", desc="Decrement the number of acks") {
     assert(is_valid(tbe));
     tbe.AcksOutstanding := tbe.AcksOutstanding - 1;
-    APPEND_TRANSITION_COMMENT("Acks: ");
-    APPEND_TRANSITION_COMMENT(tbe.AcksOutstanding);
   }
 
   action(storeAcksFromResp, "sa", desc="Store the needed acks to the TBE") {
@@ -562,15 +535,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     unset_cache_entry();
   }
 
-  // the response should be from a peer, could happen in both split bus or non split bus case
   action(writeDataToCache, "wd", desc="Write data to the cache") {
-    peek(response_in, ResponseMsg) {
-        assert(is_valid(cache_entry));
-        cache_entry.DataBlk := in_msg.DataBlk;
-    }
-  }
-  // the response could be from bus or from C2C interconnect
-  action(writeDataToCacheFromDir, "wdd", desc="Write data to the cache") {
     peek(response_in, ResponseMsg) {
         assert(is_valid(cache_entry));
         cache_entry.DataBlk := in_msg.DataBlk;
@@ -775,7 +740,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
 
   transition(IS_D, DataDirNoAcks, S) {
     toc;
-    writeDataToCacheFromDir;
+    writeDataToCache;
     deallocateTBE;
     externalLoadHit;
     popDirResponseQueue;
@@ -796,14 +761,14 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   }
 
   transition(IM_AD, OwnerDataAcks, IM_A) {
-      writeDataToCacheFromDir;
+      writeDataToCache;
       storeAcksFromResp;
       popDirResponseQueue;
   }
 
   transition({IM_AD, SM_AD}, DataDirNoAcks, M_P) {
       toc;
-      writeDataToCacheFromDir;
+      writeDataToCache;
       deallocateTBE;
       externalStoreHit;
       popDirResponseQueue;
@@ -811,14 +776,14 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   }
 
   transition(IM_AD, DataDirAcks, IM_A) {
-      writeDataToCacheFromDir;
+      writeDataToCache;
       storeAcksFromResp;
       // popResponseQueue;
       popDirResponseQueue;
       // kd_wakeUpDependents;
   }
 
-  transition({IM_AD, IM_A, SM_AD, SM_A}, InvAck) {
+  transition({IM_A, SM_A, IM_AD, SM_AD}, InvAck) {
       decrAcks;
       popResponseQueue;
   }
@@ -871,7 +836,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   }
 
   transition(SM_AD, DataDirAcks, SM_A) {
-      writeDataToCacheFromDir;
+      writeDataToCache;
       storeAcksFromResp;
       popDirResponseQueue;
       // kd_wakeUpDependents;
