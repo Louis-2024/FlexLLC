@@ -21,21 +21,6 @@
         }
     }
 
-    in_port(response_in, ResponseMsg, responseFromCache) {
-        if (response_in.isReady(clockEdge())) {
-            peek(response_in, ResponseMsg) {
-                Entry e := getCacheEntry(in_msg.addr);
-                TBE tbe := TBEs[in_msg.addr];
-
-                if(in_msg.Type == CoherenceResponseType:InvAck) {
-                    trigger(Event:InvAck, in_msg.addr, e, tbe);
-                } else {
-                    assert(false);
-                }
-            }
-        }
-    }
-
     in_port(request_in, RequestMsg, requestFromCache) {
         if (request_in.isReady(clockEdge())) {
             peek(request_in, RequestMsg) {

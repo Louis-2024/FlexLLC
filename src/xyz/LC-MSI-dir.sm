@@ -75,7 +75,6 @@ MessageBuffer *responseFromMemory;
 
         MemData, desc="";
         MemAck, desc="";
-        InvAck, desc="";
     }
 
     // structures
@@ -295,14 +294,15 @@ MessageBuffer *responseFromMemory;
     action(sendFwdGetMFromS, desc="") {
         peek(request_in, RequestMsg) {
             NetDest dest := xyzCacheMemory.getASharer(address);
+            xyzCacheMemory.removeSharer(address, dest.smallestElement());
             enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
                 out_msg.Type := CoherenceRequestType:GetM;
                 out_msg.Requestor := in_msg.Requestor;
                 out_msg.Destination := dest;
                 out_msg.MessageSize := MessageSizeType:Control;
+                out_msg.Acks := xyzCacheMemory.getSharers(address).count();
             }
-            xyzCacheMemory.removeSharer(address, dest.smallestElement());
             DPRINTF(FlexLLC, "[SendFwdGetMFromS: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, dest);
         }
     }
@@ -315,6 +315,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.Requestor := in_msg.Requestor;
                 out_msg.Destination.add(in_msg.Requestor);
                 out_msg.MessageSize := MessageSizeType:Control;
+                out_msg.Acks := xyzCacheMemory.getSharers(address).count();
             }
             DPRINTF(FlexLLC, "[SendUpgradeToReq: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, in_msg.Requestor);
         }
@@ -467,10 +468,6 @@ MessageBuffer *responseFromMemory;
     action(popRequestQueue, desc="") {
         request_in.dequeue(clockEdge());
     }
-    
-    action(popResponseQueue, desc="") {
-        response_in.dequeue(clockEdge());
-    }
 
     action(popMemQueue, desc="") {
         memQueue_in.dequeue(clockEdge());
@@ -531,10 +528,6 @@ MessageBuffer *responseFromMemory;
     }
 
     // transitions
-
-    transition({M_NI, S_NI}, InvAck) {
-        popResponseQueue;
-    }
 
     transition({S, S_NI, M, M_NI}, Put_InvalidReq) {
         sendPutAck;
@@ -790,7 +783,7 @@ MessageBuffer *responseFromMemory;
 
     transition(S_NI, GetM_NI_From_NonSharer, M_NI) {
         sendFwdGetMFromS;
-        sendInvToSharersFromLLC;
+        sendInvToSharersFromReq;
         xyzClearSharers;
         xyzAddOwnerNI;
         xyzSetIsDirty;
@@ -800,11 +793,11 @@ MessageBuffer *responseFromMemory;
 
     transition(S_NI, GetM_NI_From_Sharer, M_NI) {
         xyzRemoveSharer;
-        sendInvToSharersFromLLC;
+        sendInvToSharersFromReq;
+        sendUpgradeToReq;
         xyzClearSharers;
         xyzAddOwnerNI;
         xyzSetIsDirty;
-        sendUpgradeToReq;
         popRequestQueue;
         markLLCDone;
     }

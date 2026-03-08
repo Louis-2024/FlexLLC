@@ -29,6 +29,7 @@ structure(RequestMsg, desc="Used for Cache->Dir and Fwd messages",
     // required that you have a MessageSize for each type of message. You will
     // the the error "panic: MessageSizeType() called on wrong message!"
     MessageSizeType MessageSize, desc="size category of the message";
+    int Acks, desc="";
 
     MachineID OriginalRequestor, desc="Only used in back-invalidation case to check who is the original requestor";
     int SetIdx,                  desc="The set index used to identify ROC";                
