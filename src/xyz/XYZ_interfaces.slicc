@@ -56,6 +56,8 @@ structure (XYZCacheMemory, external = "yes") {
     bool containNILine(Addr);
     bool existVacancyPerSet(Addr);
     bool existLLCOnlyCleanLinePerSet(Addr);
+    bool existLLCOnlyDirtyLinePerSet(Addr address);
+    Addr getLRULLCOnlyDirtyLinePerSet(Addr);
 
     int getNIState(Addr);
     void setNITransientState(Addr, int);

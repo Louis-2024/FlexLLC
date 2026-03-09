@@ -334,6 +334,7 @@ class DirController(Directory_Controller):
         self.enforce_roc = enforce_roc
         self.sum_prv_capacity = prv_tot
         self.wb_buffer_size = 1 if not split_bus else wb_buffer_size
+        self.victim_addr = 0
         # Connect this directory to the memory side.
         self.memory = mem_ctrls[0].port
         self.connectQueues(ruby_system)

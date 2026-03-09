@@ -9,6 +9,7 @@ machine(MachineType:Directory, "Directory protocol"):
     bool enforce_roc := 0;
     int wb_buffer_size := 0;
     bool delayMarkDone := 0;
+    Addr victim_addr := 0;
 
 MessageBuffer *forwardToCache, network = "To", virtual_network = "1", vnet_type = "forward";
 MessageBuffer *responseToCache, network = "To", virtual_network = "2", vnet_type = "response";
@@ -41,6 +42,7 @@ MessageBuffer *responseFromMemory;
         I_to_S_await_mem_data, AccessPermission:Busy, desc="";
         I_to_M_await_mem_data, AccessPermission:Busy, desc="";
         LOD_to_LOC_await_ack, AccessPermission:Read_Only, desc="";
+        LOD_to_LOC_await_ack_await_allocation, AccessPermission:Read_Only, desc="";
 
         I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
         I_to_M_await_mem_data_NI, AccessPermission:Busy, desc="";
@@ -75,6 +77,7 @@ MessageBuffer *responseFromMemory;
 
         MemData, desc="";
         MemAck, desc="";
+        Sync, desc="";
     }
 
     // structures
@@ -450,15 +453,11 @@ MessageBuffer *responseFromMemory;
     }
 
     action(xyzSetIsDirty, desc="") {
-        peek(request_in, RequestMsg) {
-            xyzCacheMemory.setIsDirty(in_msg.addr);
-        }
+        xyzCacheMemory.setIsDirty(address);
     }
 
     action(xyzUnsetIsDirty, desc="") {
-        peek(request_in, RequestMsg) {
-            xyzCacheMemory.unSetIsDirty(in_msg.addr);
-        }
+        xyzCacheMemory.unSetIsDirty(address);
     }
 
     action(xyzConvertNILineToIN, desc="") {
@@ -536,6 +535,16 @@ MessageBuffer *responseFromMemory;
     }
 
     // 1. transitions from LOC / LOD
+
+    transition(LOD, Sync, LOD_to_LOC_await_ack_await_allocation) {
+        sendLLCDataToMem;
+        xyzUnsetIsDirty;
+    }
+
+    transition(LOD_to_LOC_await_ack_await_allocation, MemAck, LOC) {
+        popMemQueue;
+        wakeUpBuffers;
+    }
 
     transition(LOD, PutLOD, LOD_to_LOC_await_ack) {
         sendLLCDataToMem;

@@ -607,12 +607,12 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     peek(requestFromL0_in, RequestMsg) {
         Addr a := in_msg.addr;
         stall_and_wait(requestFromL0_in, a);
-        DPRINTF(FlexLLC, "! %s stall: Stalled address = %#x, state = %s \n", machineID, in_msg.addr, getState(tbe, cache_entry, in_msg.addr));
+        // DPRINTF(FlexLLC, "! %s stall: Stalled address = %#x, state = %s \n", machineID, in_msg.addr, getState(tbe, cache_entry, in_msg.addr));
     }
   }
   action(stall_fwd, "zfwd", desc="Stall forward") {
       stall_and_wait(forward_in, address);
-      DPRINTF(FlexLLC, "! %s stall_fwd: Stalled address = %#x, state = %s \n", machineID, address, getState(tbe, cache_entry, address));
+      // DPRINTF(FlexLLC, "! %s stall_fwd: Stalled address = %#x, state = %s \n", machineID, address, getState(tbe, cache_entry, address));
   }
 
   action(kd_wakeUpDependents, "kd", desc="Wake-up dependents") {
