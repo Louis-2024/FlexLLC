@@ -284,6 +284,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
         } else if (in_msg.Type == CoherenceRequestType:PutAck) {
             trigger(Event:PutAck, in_msg.addr, cache_entry, tbe);
         } else if (in_msg.Type == CoherenceRequestType:Upgrade) {
+            assert(is_valid(tbe));
             if (in_msg.Acks + tbe.AcksOutstanding == 0) {
                 trigger(Event:UpgradeNoAcks, in_msg.addr, cache_entry, tbe);
             } else if (in_msg.Acks + tbe.AcksOutstanding > 0) {
@@ -306,10 +307,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
         Entry cache_entry := getCacheEntry(in_msg.addr);
         TBE tbe := TBEs[in_msg.addr];
         if(TBEs.cnt() > 0) {
-            // only 1 outstanding request
-            // TODO: relax this constraint
-            trigger(Event:Stall, in_msg.addr, cache_entry,
-                    tbe);
+            trigger(Event:Stall, in_msg.addr, cache_entry, tbe);
         } else {
             if(in_msg.Type == CoherenceRequestType:PutM) {
                     trigger(Event:PutM, in_msg.addr, cache_entry, tbe);
@@ -335,6 +333,12 @@ machine(MachineType:L1Cache, "LC-MSI cache")
             }
         }
       }
+    }
+  }
+
+  action(stallingAlarm, desc="") {
+    peek(requestFromL0_in, RequestMsg) {
+      DPRINTF(FlexLLC, "!!! %s stall: Stalled address = %#x, TBEs.cnt() = %d \n", machineID, in_msg.addr, TBEs.cnt());
     }
   }
 
@@ -591,10 +595,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       response_in.dequeue(clockEdge());
   }
 
-  action(popDirResponseQueue, "pdR", desc="Pop the response queue for directory") {
-      response_in.dequeue(clockEdge());
-  }
-
   action(popForwardQueue, "pF", desc="Pop the forward queue") {
       forward_in.dequeue(clockEdge());
   }
@@ -607,10 +607,12 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     peek(requestFromL0_in, RequestMsg) {
         Addr a := in_msg.addr;
         stall_and_wait(requestFromL0_in, a);
+        DPRINTF(FlexLLC, "! %s stall: Stalled address = %#x, state = %s \n", machineID, in_msg.addr, getState(tbe, cache_entry, in_msg.addr));
     }
   }
   action(stall_fwd, "zfwd", desc="Stall forward") {
-    stall_and_wait(forward_in, address);
+      stall_and_wait(forward_in, address);
+      DPRINTF(FlexLLC, "! %s stall_fwd: Stalled address = %#x, state = %s \n", machineID, address, getState(tbe, cache_entry, address));
   }
 
   action(kd_wakeUpDependents, "kd", desc="Wake-up dependents") {
@@ -743,7 +745,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     writeDataToCache;
     deallocateTBE;
     externalLoadHit;
-    popDirResponseQueue;
+    popResponseQueue;
     kd_wakeUpDependents;
   }
 
@@ -763,7 +765,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   transition(IM_AD, OwnerDataAcks, IM_A) {
       writeDataToCache;
       storeAcksFromResp;
-      popDirResponseQueue;
+      popResponseQueue;
   }
 
   transition({IM_AD, SM_AD}, DataDirNoAcks, M_P) {
@@ -771,7 +773,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       writeDataToCache;
       deallocateTBE;
       externalStoreHit;
-      popDirResponseQueue;
+      popResponseQueue;
       kd_wakeUpDependents;
   }
 
@@ -779,7 +781,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       writeDataToCache;
       storeAcksFromResp;
       // popResponseQueue;
-      popDirResponseQueue;
+      popResponseQueue;
       // kd_wakeUpDependents;
   }
 
@@ -838,7 +840,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   transition(SM_AD, DataDirAcks, SM_A) {
       writeDataToCache;
       storeAcksFromResp;
-      popDirResponseQueue;
+      popResponseQueue;
       // kd_wakeUpDependents;
   }
 
@@ -894,6 +896,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   }
 
   transition({I,M,S,SI_A,II_A,SM_AD,IM_AD,IM_A,SM_A,MI_A}, Stall) {
+    stallingAlarm;
     stall;
   }
 
