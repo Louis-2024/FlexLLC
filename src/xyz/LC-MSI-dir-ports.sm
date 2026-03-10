@@ -9,10 +9,10 @@
                 TBE tbe := TBEs[in_msg.addr];
 
                 if (in_msg.Type == MemoryRequestType:MEMORY_READ) {
-                    DPRINTF(FlexLLC, "MemData: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
+                    DPRINTF(FlexLLC, "MemData: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
                     trigger(Event:MemData, in_msg.addr, e, tbe);
                 } else if (in_msg.Type == MemoryRequestType:MEMORY_WB) {
-                    DPRINTF(FlexLLC, "MemAck: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
+                    DPRINTF(FlexLLC, "MemAck: Address = %#x, Current State = %s, Sender = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Sender);
                     trigger(Event:MemAck, in_msg.addr, e, tbe);
                 } else {
                     assert(false);
@@ -51,8 +51,14 @@
                         }
                     } else if (in_msg.Type == CoherenceRequestType:GetM) {
                         if (xyzCacheMemory.containLLCLine(in_msg.addr)) {
-                            DPRINTF(FlexLLC, "GetM: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                            trigger(Event:GetM, in_msg.addr, e, tbe);
+                            if (xyzCacheMemory.getSharers(in_msg.addr).isElement(in_msg.Requestor)) {
+                                // scenario where requestor holds target line in S, and wants to upgrade to M
+                                DPRINTF(FlexLLC, "GetM_From_Sharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                                trigger(Event:GetM_From_Sharer, in_msg.addr, e, tbe);
+                            } else {
+                                DPRINTF(FlexLLC, "GetM_From_NonSharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                                trigger(Event:GetM_From_NonSharer, in_msg.addr, e, tbe);
+                            }
                         } else if (xyzCacheMemory.containNILine(in_msg.addr)) {
                             if (xyzCacheMemory.getSharers(in_msg.addr).isElement(in_msg.Requestor)) {
                                 // scenario where requestor holds target line in S, and wants to upgrade to M
@@ -64,8 +70,8 @@
                             }
                         } else {
                             if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
-                                DPRINTF(FlexLLC, "GetM: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                                trigger(Event:GetM, in_msg.addr, e, tbe);
+                                DPRINTF(FlexLLC, "GetM_From_NonSharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                                trigger(Event:GetM_From_NonSharer, in_msg.addr, e, tbe);
                             } else {
                                 DPRINTF(FlexLLC, "GetM_NI_From_NonSharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                 trigger(Event:GetM_NI_From_NonSharer, in_msg.addr, e, tbe);

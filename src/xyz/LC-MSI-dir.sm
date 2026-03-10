@@ -51,7 +51,8 @@ MessageBuffer *responseFromMemory;
 
     enumeration(Event, desc="Directory events") {
         GetS, desc="";
-        GetM, desc="";
+        GetM_From_NonSharer, desc="";
+        GetM_From_Sharer, desc="";
 
         GetS_NI, desc="";
         GetM_NI_From_NonSharer, desc="";
@@ -375,7 +376,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.Destination.add(in_msg.Requestor);
                 out_msg.MessageSize := MessageSizeType:Control;
             }
-            DPRINTF(FlexLLC, "[sendPutAck: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, in_msg.Requestor);
+            DPRINTF(FlexLLC, "[SendPutAck: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, in_msg.Requestor);
         }
     }
 
@@ -564,7 +565,7 @@ MessageBuffer *responseFromMemory;
         markLLCDone_await_data;
     }
 
-    transition({LOC, LOD}, GetM, M) {
+    transition({LOC, LOD}, GetM_From_NonSharer, M) {
         xyzAddOwner;
         xyzSetIsDirty;
         sendLLCDataToReq;
@@ -581,7 +582,7 @@ MessageBuffer *responseFromMemory;
         popRequestQueue;
     }
 
-    transition(I, GetM, I_to_M_await_mem_data) {
+    transition(I, GetM_From_NonSharer, I_to_M_await_mem_data) {
         allocateCacheBlock;
         xyzAddOwner;
         xyzSetIsDirty;
@@ -612,8 +613,7 @@ MessageBuffer *responseFromMemory;
         markLLCDone_await_data;
     }
 
-    transition(S, GetM, M) {
-        xyzRemoveSharer;
+    transition(S, GetM_From_NonSharer, M) {
         sendInvToSharersFromReq;
         xyzAddOwner;
         xyzSetIsDirty;
@@ -621,6 +621,17 @@ MessageBuffer *responseFromMemory;
         xyzClearSharers;
         popRequestQueue;
         markLLCDone_await_data;
+    }
+
+    transition(S, GetM_From_Sharer, M) {
+        xyzRemoveSharer;
+        sendInvToSharersFromReq;
+        sendUpgradeToReq;
+        xyzClearSharers;
+        xyzAddOwner;
+        xyzSetIsDirty;
+        popRequestQueue;
+        markLLCDone;
     }
 
     transition(S, PutS_NotLastCopy) {
@@ -662,7 +673,7 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
-    transition(M, GetM) {
+    transition(M, GetM_From_NonSharer) {
         sendFwdGetMFromM;
         xyzClearOwner;
         xyzAddOwner;
