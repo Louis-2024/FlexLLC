@@ -206,6 +206,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
         TBE tbe := TBEs[in_msg.addr];
 
         if (in_msg.Type == CoherenceRequestType:Inv) {
+            DPRINTF(FlexLLC, "(%s) (Inv: Address = %#x, Requestor = %s, State = %s) \n", machineID, in_msg.addr, in_msg.Requestor, getState(tbe, cache_entry, in_msg.addr));
             trigger(Event:Inv, in_msg.addr, cache_entry, tbe);
         } else {
             error("Unexpected forward message!");
@@ -221,10 +222,8 @@ machine(MachineType:L0Cache, "LC-MSI cache")
         TBE tbe := TBEs[in_msg.LineAddress];
         Entry cache_entry := getCacheEntry(in_msg.LineAddress);
         if(TBEs.cnt() > 0) {
-            // only 1 outstanding request
-            // TODO: relax this constraint
-            trigger(Event:Stall, in_msg.LineAddress, cache_entry,
-                    tbe);
+            DPRINTF(FlexLLC, "(%s) !!! stall: Stalled address = %#x, TBEs.cnt() = %d \n", machineID, in_msg.LineAddress, TBEs.cnt());
+            trigger(Event:Stall, in_msg.LineAddress, cache_entry, tbe);
         }
         Entry Icache_entry := getICacheEntry(in_msg.LineAddress);
         Entry Dcache_entry := getDCacheEntry(in_msg.LineAddress);
@@ -234,9 +233,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
                 // hit
                 trigger(Event:Ifetch, in_msg.LineAddress, Icache_entry, tbe);
             } else {
-                if(is_valid(Dcache_entry)) { // wrong
-                    trigger(Event:Replacement, in_msg.LineAddress, Dcache_entry, tbe);
-                }
                 if(ICache.cacheAvail(in_msg.LineAddress)) {
                     // or miss
                     trigger(Event:Ifetch, in_msg.LineAddress, Icache_entry, tbe);
@@ -249,20 +245,15 @@ machine(MachineType:L0Cache, "LC-MSI cache")
         } else {
             // Data access
             if(is_valid(Dcache_entry)) {
-                trigger(
-                    mandatory_request_type_to_event(in_msg.Type),
-                        in_msg.LineAddress, Dcache_entry, tbe);
-            } else if(is_valid(Icache_entry)) {
-                trigger(Event:Replacement, in_msg.LineAddress, Icache_entry, tbe);
-            } else if(DCache.cacheAvail(in_msg.LineAddress)) {
-                trigger(
-                    mandatory_request_type_to_event(in_msg.Type),
-                        in_msg.LineAddress, Dcache_entry, tbe);
+                trigger(mandatory_request_type_to_event(in_msg.Type), in_msg.LineAddress, Dcache_entry, tbe);
             } else {
-                // victim
-                Addr addr := DCache.cacheProbe(in_msg.LineAddress);
-                check_on_cache_probe(mandatory_in, addr);
-                trigger(Event:Replacement, addr, getDCacheEntry(addr), TBEs[addr]);
+                if(DCache.cacheAvail(in_msg.LineAddress)) {
+                    trigger(mandatory_request_type_to_event(in_msg.Type), in_msg.LineAddress, Dcache_entry, tbe);
+                } else {
+                    Addr addr := DCache.cacheProbe(in_msg.LineAddress);
+                    check_on_cache_probe(mandatory_in, addr);
+                    trigger(Event:Replacement, addr, getDCacheEntry(addr), TBEs[addr]);
+                }
             }
         }
       }
@@ -315,6 +306,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
           out_msg.Requestor := machineID;
           out_msg.is_reordered := false;
       }
+      DPRINTF(FlexLLC, "(%s) (sendPutM: Address = %#x, Destination = %s) \n", machineID, address, createMachineID(MachineType:L1Cache, version));
   }
   action(sendWBData, "sWB", desc="Send putM+data to the directory") {
       assert(is_valid(cache_entry));
@@ -325,6 +317,16 @@ machine(MachineType:L0Cache, "LC-MSI cache")
           out_msg.DataBlk := cache_entry.DataBlk;
           out_msg.MessageSize := MessageSizeType:Data;
       }
+      DPRINTF(FlexLLC, "(%s) (sendWBData: Address = %#x, Destination = %s) \n", machineID, address, createMachineID(MachineType:L1Cache, version));
+  }
+  action(sendInvAck, desc="") {
+      enqueue(response_out, ResponseMsg, 1) {
+          out_msg.addr := address;
+          out_msg.Type := CoherenceResponseType:InvAck;
+          out_msg.Destination.add(createMachineID(MachineType:L1Cache, version));
+          out_msg.MessageSize := MessageSizeType:Data;
+      }
+      DPRINTF(FlexLLC, "(%s) (sendInvAck: Address = %#x, Destination = %s) \n", machineID, address, createMachineID(MachineType:L1Cache, version));
   }
   action(sendCacheDataToReq, "cdR", desc="Send cache data to requestor") {
     assert(is_valid(cache_entry));
@@ -470,10 +472,12 @@ machine(MachineType:L0Cache, "LC-MSI cache")
         Addr a := in_msg.LineAddress;
         // Addr a := in_msg.PhysicalAddress;
         stall_and_wait(mandatory_in, a);
+        DPRINTF(FlexLLC, "(%s) ! stall: Stalled address = %#x, state = %s \n", machineID, a, getState(tbe, cache_entry, a));
     }
   }
   action(stall_fwd, "zfwd", desc="Stall forward") {
     stall_and_wait(forward_in, address);
+    DPRINTF(FlexLLC, "(%s) ! stall_fwd: Stalled address = %#x, state = %s \n", machineID, address, getState(tbe, cache_entry, address));
   }
 
   action(kd_wakeUpDependents, "kd", desc="Wake-up dependents") {
@@ -533,11 +537,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     kd_wakeUpDependents;
   }
 
-  
-  // transition({IM_AD, IM_A}, {Load, Store, Replacement}) {
-  //   stall;
-  // }
-
   transition(IM_D, Data, M) {
     toc;
       writeDataToCache;
@@ -563,9 +562,9 @@ machine(MachineType:L0Cache, "LC-MSI cache")
 
   transition(S, Replacement, I) {
       tic;
+      sendInvAck;
       deallocateCacheBlock;
       forwardEviction;
-      kd_wakeUpDependents;
   }
 
   transition(M, Replacement, I) {
@@ -583,11 +582,13 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
 
   transition(S, Inv, I) {
-      deallocateCacheBlock;
-      forwardEviction;
-      popForwardQueue;
+    sendInvAck;
+    deallocateCacheBlock;
+    forwardEviction;
+    popForwardQueue;
   }
   transition(I, Inv) {
+    sendInvAck;
     popForwardQueue;
   }
 
