@@ -313,15 +313,16 @@ MessageBuffer *responseFromMemory;
 
     action(sendUpgradeToReq, desc="") {
         peek(request_in, RequestMsg) {
-            enqueue(forward_out, RequestMsg, 1) {
+            enqueue(response_out, ResponseMsg, responseBusLatency) {
                 out_msg.addr := address;
-                out_msg.Type := CoherenceRequestType:Upgrade;
-                out_msg.Requestor := in_msg.Requestor;
+                out_msg.Type := CoherenceResponseType:Upgrade;
+                out_msg.Sender := machineID;
                 out_msg.Destination.add(in_msg.Requestor);
-                out_msg.MessageSize := MessageSizeType:Control;
+                out_msg.MessageSize := MessageSizeType:Response_Data;
+                out_msg.OriginalRequestor := in_msg.Requestor;
                 out_msg.Acks := xyzCacheMemory.getSharers(address).count();
             }
-            DPRINTF(FlexLLC, "[SendUpgradeToReq: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, in_msg.Requestor);
+            DPRINTF(FlexLLC, "[SendUpgradeToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.Requestor, machineID, in_msg.Requestor);
         }
     }
 
@@ -631,7 +632,7 @@ MessageBuffer *responseFromMemory;
         xyzAddOwner;
         xyzSetIsDirty;
         popRequestQueue;
-        markLLCDone;
+        markLLCDone_await_data;
     }
 
     transition(S, PutS_NotLastCopy) {
@@ -819,7 +820,7 @@ MessageBuffer *responseFromMemory;
         xyzAddOwnerNI;
         xyzSetIsDirty;
         popRequestQueue;
-        markLLCDone;
+        markLLCDone_await_data;
     }
 
     // 7. transitions for M_NI
