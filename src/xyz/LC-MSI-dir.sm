@@ -79,6 +79,7 @@ MessageBuffer *responseFromMemory;
         MemData, desc="";
         MemAck, desc="";
         Sync, desc="";
+        Upgrade, desc="";
     }
 
     // structures
@@ -312,15 +313,14 @@ MessageBuffer *responseFromMemory;
 
     action(sendUpgradeToReq, desc="") {
         peek(request_in, RequestMsg) {
-            enqueue(response_out, ResponseMsg, responseBusLatency) {
+            enqueue(forward_out, RequestMsg, 1) {
                 out_msg.addr := address;
-                out_msg.Type := CoherenceResponseType:Upgrade;
-                out_msg.Sender := machineID;
+                out_msg.Type := CoherenceRequestType:Upgrade;
+                out_msg.Requestor := machineID;
                 out_msg.Destination.add(in_msg.Requestor);
-                out_msg.MessageSize := MessageSizeType:Response_Data;
-                out_msg.OriginalRequestor := in_msg.Requestor;
+                out_msg.MessageSize := MessageSizeType:Control;
             }
-            DPRINTF(FlexLLC, "[SendUpgradeToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.Requestor, machineID, in_msg.Requestor);
+            DPRINTF(FlexLLC, "[SendUpgradeToReq: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, in_msg.Requestor);
         }
     }
 
@@ -366,6 +366,19 @@ MessageBuffer *responseFromMemory;
                 out_msg.MessageSize := MessageSizeType:Control;
             }
             DPRINTF(FlexLLC, "[SendPutAck: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, in_msg.Requestor);
+        }
+    }
+
+    action(sendUpgradeAckToReq, desc="") {
+        peek(request_in, RequestMsg) {
+            enqueue(forward_out, RequestMsg, 1) {
+                out_msg.addr := address;
+                out_msg.Type := CoherenceRequestType:UpgradeAck;
+                out_msg.Requestor := machineID;
+                out_msg.Destination.add(in_msg.Requestor);
+                out_msg.MessageSize := MessageSizeType:Control;
+            }
+            DPRINTF(FlexLLC, "[UpgradeAck: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, in_msg.Requestor);
         }
     }
 
@@ -615,7 +628,7 @@ MessageBuffer *responseFromMemory;
     transition(S, GetM_From_Sharer, M) {
         xyzRemoveSharer;
         sendUpgradeToReq;
-        sendInvToSharersFromReq;
+        // sendInvToSharersFromReq;
         xyzClearSharers;
         xyzAddOwner;
         xyzSetIsDirty;
@@ -650,6 +663,16 @@ MessageBuffer *responseFromMemory;
         xyzUnsetIsDirty;
         xyzRemoveSharer;
         popRequestQueue;
+    }
+
+    transition(S, Upgrade, M) {
+        // todo: add invalidations
+        sendUpgradeAckToReq;
+        xyzClearSharers;
+        xyzAddOwner;
+        xyzSetIsDirty;
+        popRequestQueue;
+        markLLCDone;
     }
 
     // 4. transitions from M
@@ -721,6 +744,16 @@ MessageBuffer *responseFromMemory;
     }
 
     // 6. transitions for S_NI
+
+    transition(S_NI, Upgrade, M_NI) {
+        // todo: add invalidations
+        sendUpgradeAckToReq;
+        xyzClearSharers;
+        xyzAddOwnerNI;
+        xyzSetIsDirty;
+        popRequestQueue;
+        markLLCDone;
+    }
 
     transition(DirtyNI_to_I_await_ack, MemAck, I) {
         unsetNITransientState;
