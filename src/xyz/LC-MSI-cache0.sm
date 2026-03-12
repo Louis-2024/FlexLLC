@@ -319,15 +319,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
       }
       DPRINTF(FlexLLC, "(%s) (sendWBData: Address = %#x, Destination = %s) \n", machineID, address, createMachineID(MachineType:L1Cache, version));
   }
-  action(sendInvAck, desc="") {
-      enqueue(response_out, ResponseMsg, 1) {
-          out_msg.addr := address;
-          out_msg.Type := CoherenceResponseType:InvAck;
-          out_msg.Destination.add(createMachineID(MachineType:L1Cache, version));
-          out_msg.MessageSize := MessageSizeType:Data;
-      }
-      DPRINTF(FlexLLC, "(%s) (sendInvAck: Address = %#x, Destination = %s) \n", machineID, address, createMachineID(MachineType:L1Cache, version));
-  }
   action(sendCacheDataToReq, "cdR", desc="Send cache data to requestor") {
     assert(is_valid(cache_entry));
     // in_message & out_message
@@ -522,27 +513,27 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
   transition(IS_D, Data, S) {
     toc;
-        writeDataToCache;
-        deallocateTBE;
-        externalLoadHit;
-        popResponseQueue;
+    writeDataToCache;
+    deallocateTBE;
+    externalLoadHit;
+    popResponseQueue;
     kd_wakeUpDependents;
   }
   transition(IS_D, ExData, M) {
     toc;
-        writeDataToCache;
-        deallocateTBE;
-        externalLoadHit;
-        popResponseQueue;
+    writeDataToCache;
+    deallocateTBE;
+    externalLoadHit;
+    popResponseQueue;
     kd_wakeUpDependents;
   }
 
-  transition(IM_D, Data, M) {
+  transition(IM_D, ExData, M) {
     toc;
-      writeDataToCache;
-      deallocateTBE;
-      externalStoreHit;
-      popResponseQueue;
+    writeDataToCache;
+    deallocateTBE;
+    externalStoreHit;
+    popResponseQueue;
     kd_wakeUpDependents;
   }
 
@@ -562,7 +553,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
 
   transition(S, Replacement, I) {
       tic;
-      sendInvAck;
       deallocateCacheBlock;
       forwardEviction;
   }
@@ -582,13 +572,11 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
 
   transition(S, Inv, I) {
-    sendInvAck;
     deallocateCacheBlock;
     forwardEviction;
     popForwardQueue;
   }
   transition(I, Inv) {
-    sendInvAck;
     popForwardQueue;
   }
 

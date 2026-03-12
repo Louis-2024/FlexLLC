@@ -91,7 +91,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     LastInvAck,     desc="Triggered after the last ack is received";
 
     WB_Data,        desc="";
-    L0_Clean_Eviction_Ack, desc="";
 
     // FlexLLC
     UpgradeNoAcks, desc="";
@@ -209,9 +208,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
             if(in_msg.Type == CoherenceResponseType:Data) {
                 DPRINTF(FlexLLC, "(%s) (WB_Data: Address = %#x, Sender = %s) \n", machineID, in_msg.addr, in_msg.Sender);
                 trigger(Event:WB_Data, in_msg.addr, cache_entry, tbe);   
-            } else if (in_msg.Type == CoherenceResponseType:InvAck) {
-                DPRINTF(FlexLLC, "(%s) (L0_Clean_Eviction_Ack: Address = %#x, Sender = %s) \n", machineID, in_msg.addr, in_msg.Sender);
-                trigger(Event:L0_Clean_Eviction_Ack, in_msg.addr, cache_entry, tbe);   
             } else {
                 error("Unrecognized event from L0");
             }
@@ -521,7 +517,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     enqueue(responseToL0_out, ResponseMsg, 1) {
         out_msg.addr := address;
         out_msg.DataBlk := cache_entry.DataBlk;
-        out_msg.Type := CoherenceResponseType:Data;
+        out_msg.Type := CoherenceResponseType:ExData;
         out_msg.Destination.add(createMachineID(MachineType:L0Cache, version));
         out_msg.MessageSize := MessageSizeType:Data;
     }
@@ -533,7 +529,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       enqueue(responseToL0_out, ResponseMsg, 1) {
           out_msg.addr := address;
           out_msg.DataBlk := cache_entry.DataBlk;
-          out_msg.Type := CoherenceResponseType:Data;
+          out_msg.Type := CoherenceResponseType:ExData;
           out_msg.Destination.add(createMachineID(MachineType:L0Cache, version));
           out_msg.MessageSize := MessageSizeType:Data;
       }
@@ -905,15 +901,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     writebackRespDataToCache;
     popL0ResponseQueue;
     kd_wakeUpDependents;
-  }
-
-  transition({M_P, MP_D}, L0_Clean_Eviction_Ack, M) {
-    popL0ResponseQueue;
-    kd_wakeUpDependents;
-  }
-
-  transition({SI_A, I}, L0_Clean_Eviction_Ack) {
-    popL0ResponseQueue;
   }
 
   transition({I,M,S,SI_A,II_A,SM_AD,IM_AD,IM_A,SM_A,MI_A}, Stall) {
