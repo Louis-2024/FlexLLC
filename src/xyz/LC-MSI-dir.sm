@@ -305,7 +305,6 @@ MessageBuffer *responseFromMemory;
                 out_msg.Requestor := in_msg.Requestor;
                 out_msg.Destination := dest;
                 out_msg.MessageSize := MessageSizeType:Control;
-                out_msg.Acks := xyzCacheMemory.getSharers(address).count();
             }
             DPRINTF(FlexLLC, "[SendFwdGetMFromS: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, dest);
         }
@@ -320,7 +319,6 @@ MessageBuffer *responseFromMemory;
                 out_msg.Destination.add(in_msg.Requestor);
                 out_msg.MessageSize := MessageSizeType:Response_Data;
                 out_msg.OriginalRequestor := in_msg.Requestor;
-                out_msg.Acks := xyzCacheMemory.getSharers(address).count();
             }
             DPRINTF(FlexLLC, "[SendUpgradeToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.Requestor, machineID, in_msg.Requestor);
         }
@@ -337,11 +335,6 @@ MessageBuffer *responseFromMemory;
                 out_msg.DataBlk := cache_entry.DataBlk;
                 out_msg.MessageSize := MessageSizeType:Response_Data;
                 out_msg.OriginalRequestor := in_msg.Requestor;
-                if (xyzCacheMemory.getOwner(address).isElement(in_msg.Requestor)) {
-                    out_msg.Acks := xyzCacheMemory.getSharers(address).count();
-                } else {
-                    out_msg.Acks := 0;
-                }
                 xyzCacheMemory.setMRU(cache_entry);
             }
             DPRINTF(FlexLLC, "[SendLLCDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.Requestor, machineID, in_msg.Requestor);
@@ -358,11 +351,6 @@ MessageBuffer *responseFromMemory;
                 out_msg.DataBlk := in_msg.DataBlk;
                 out_msg.MessageSize := MessageSizeType:Data;
                 out_msg.OriginalRequestor := in_msg.OriginalRequestorMachId;
-                if (xyzCacheMemory.getOwner(address).isElement(in_msg.OriginalRequestorMachId)) {
-                    out_msg.Acks := xyzCacheMemory.getSharers(address).count();
-                } else {
-                    out_msg.Acks := 0;
-                }
             }
             DPRINTF(FlexLLC, "[SendMemDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.OriginalRequestorMachId, machineID, in_msg.OriginalRequestorMachId);
         }
@@ -626,8 +614,8 @@ MessageBuffer *responseFromMemory;
 
     transition(S, GetM_From_Sharer, M) {
         xyzRemoveSharer;
-        sendInvToSharersFromReq;
         sendUpgradeToReq;
+        sendInvToSharersFromReq;
         xyzClearSharers;
         xyzAddOwner;
         xyzSetIsDirty;
@@ -814,8 +802,8 @@ MessageBuffer *responseFromMemory;
 
     transition(S_NI, GetM_NI_From_Sharer, M_NI) {
         xyzRemoveSharer;
-        sendInvToSharersFromReq;
         sendUpgradeToReq;
+        sendInvToSharersFromReq;
         xyzClearSharers;
         xyzAddOwnerNI;
         xyzSetIsDirty;
