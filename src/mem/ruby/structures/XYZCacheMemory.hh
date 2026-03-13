@@ -63,7 +63,10 @@ public:
             dest.add(LLC_directory[set_index].metadata_per_set[address].sharers.smallestElement());
         } else if (containNILine(address)) {
             dest.add(NI_directory[set_index].metadata_per_set[address].sharers.smallestElement());
+        } else {
+            assert(false);
         }
+        assert(dest.count() == 1);
         return dest;
     }
 
@@ -86,6 +89,7 @@ public:
         if (inclusive) {
             assert(!is_present_in_NI_directory);
             if (is_present_in_LLC_directory) {
+                assert(LLC_directory[set_index].metadata_per_set[address].owner.count() == 0);
                 LLC_directory[set_index].metadata_per_set[address].sharers.add(core);
             } else {
                 NetDest dest;
@@ -95,6 +99,7 @@ public:
         } else {
             assert(!is_present_in_LLC_directory);
             if (is_present_in_NI_directory) {
+                assert(NI_directory[set_index].metadata_per_set[address].owner.count() == 0);
                 NI_directory[set_index].metadata_per_set[address].sharers.add(core);
             } else {
                 NetDest dest;
@@ -130,6 +135,8 @@ public:
         if (inclusive) {
             assert(!is_present_in_NI_directory);
             if (is_present_in_LLC_directory) {
+                assert(LLC_directory[set_index].metadata_per_set[address].owner.count() == 0);
+                assert(LLC_directory[set_index].metadata_per_set[address].sharers.count() == 0);
                 LLC_directory[set_index].metadata_per_set[address].owner.add(core);
             } else {
                 NetDest dest;
@@ -140,6 +147,8 @@ public:
         } else {
             assert(!is_present_in_LLC_directory);
             if (is_present_in_NI_directory) {
+                assert(NI_directory[set_index].metadata_per_set[address].owner.count() == 0);
+                assert(NI_directory[set_index].metadata_per_set[address].sharers.count() == 0);
                 NI_directory[set_index].metadata_per_set[address].owner.add(core);
             } else {
                 NetDest dest;
@@ -235,11 +244,13 @@ public:
                 return 1; // S_NI
             } else if ((NI_directory[set_index].metadata_per_set[address].sharers.count() == 0) && (NI_directory[set_index].metadata_per_set[address].owner.count() > 0)) {
                 return 2; // M_NI
+            } else {
+                assert(false);
+                return 0;
             }
         } else {
             return NI_directory[set_index].metadata_per_set[address].NI_transient_state;
         }
-        return 0;
     }
 
     void convertNILineToIN(Addr address) {
@@ -289,17 +300,6 @@ public:
     }
 
     // line searching operations
-
-    std::unordered_set<Addr> getLinesPerSet(Addr address) {
-        int64_t set_index = addressToCacheSet(address);
-        std::unordered_map<Addr, MetadataPerLine> target_set = LLC_directory[set_index].metadata_per_set;
-        std::unordered_set<Addr> lines;
-
-        for (auto line = target_set.begin(); line != target_set.end(); line++) {
-            lines.insert(line->first);
-        }
-        return lines;
-    }
 
     std::unordered_set<Addr> getLLCOnlyCleanLinesPerSet(Addr address) {
         int64_t set_index = addressToCacheSet(address);

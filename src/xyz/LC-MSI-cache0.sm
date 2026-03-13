@@ -22,10 +22,9 @@ machine(MachineType:L0Cache, "LC-MSI cache")
                 desc="Invalid, moving to S, waiting for data";
     IM_D,   AccessPermission:Busy,
                 desc="Invalid, moving to M, waiting for acks";
-
+    SM_D, AccessPermission:Read_Only, desc="";
     S,      AccessPermission:Read_Only,
                 desc="Shared. Read-only, other caches may have the block";
-
     M,      AccessPermission:Read_Write,
                 desc="Modified. Read & write permissions. Owner of block";
 
@@ -505,10 +504,10 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     popMandatoryQueue;
   }
 
-  transition(IS_D, {Load, Store, Replacement}) {
+  transition({IS_D, IM_D, SM_D}, {Load, Store, Replacement}) {
     stall;
   }
-  transition({IS_D, IM_D}, Inv) {
+  transition({IS_D, IM_D, SM_D}, Inv) {
     stall_fwd;
   }
   transition(IS_D, Data, S) {
@@ -542,13 +541,19 @@ machine(MachineType:L0Cache, "LC-MSI cache")
       popMandatoryQueue;
   }
 
-  transition(S, Store, IM_D) {
+  transition(S, Store, SM_D) {
     tic;
-      deallocateCacheBlock;
-      allocateDCacheBlock;
-      allocateTBE;
-      sendGetM;
-      popMandatoryQueue;
+    allocateTBE;
+    sendGetM;
+    popMandatoryQueue;
+  }
+
+  transition(SM_D, ExData, M) {
+    toc;
+    deallocateTBE;
+    externalStoreHit;
+    popResponseQueue;
+    kd_wakeUpDependents;
   }
 
   transition(S, Replacement, I) {

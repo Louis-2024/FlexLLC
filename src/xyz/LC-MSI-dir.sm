@@ -29,7 +29,7 @@ MessageBuffer *responseFromMemory;
 {
     state_declaration(State, desc="Directory states", default="Directory_State_I") {
         // stable states
-        M, AccessPermission:Invalid, desc="";
+        M, AccessPermission:Busy, desc="";
         S, AccessPermission:Read_Only, desc="";
         I, AccessPermission:Read_Write, desc="";
         LOC, AccessPermission:Read_Write, desc="LLC_Only_Clean";
@@ -46,7 +46,7 @@ MessageBuffer *responseFromMemory;
 
         I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
         I_to_M_await_mem_data_NI, AccessPermission:Busy, desc="";
-        DirtyNI_to_I_await_ack, AccessPermission:Busy, desc="";
+        DirtyNI_to_I_await_ack, AccessPermission:Read_Only, desc="";
     }
 
     enumeration(Event, desc="Directory events") {
@@ -617,10 +617,10 @@ MessageBuffer *responseFromMemory;
 
     transition(S, GetM_From_NonSharer, M) {
         sendInvToSharersFromReq;
+        xyzClearSharers;
         xyzAddOwner;
         xyzSetIsDirty;
         sendLLCDataToReq;
-        xyzClearSharers;
         popRequestQueue;
         markLLCDone_await_data;
     }

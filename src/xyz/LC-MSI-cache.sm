@@ -31,7 +31,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                 desc="Invalid, moving to M, waiting for acks and data";
     S,      AccessPermission:Read_Only,
                 desc="Shared. Read-only, other caches may have the block";
-    SM_D,  AccessPermission:Busy,
+    SM_D,  AccessPermission:Read_Only,
                 desc="Shared, moving to M, waiting for acks and 'data'";
     M,      AccessPermission:Read_Write,
                 desc="Modified. Read & write permissions. Owner of block";
