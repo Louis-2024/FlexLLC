@@ -637,13 +637,15 @@ MessageBuffer *responseFromMemory;
     }
 
     transition(S, PutS_NotLastCopy) {
+        copyRequestDataToLLC;
         sendPutAck;
         xyzRemoveSharer;
         popRequestQueue;
         markLLCDone;
     }
 
-    transition(S, PutS_LastCopy_Clean, LOC) {
+    transition(S, PutS_LastCopy_Clean, LOD) {
+        copyRequestDataToLLC;
         sendPutAck;
         xyzRemoveSharer;
         popRequestQueue;
@@ -651,18 +653,11 @@ MessageBuffer *responseFromMemory;
     }
 
     transition(S, PutS_LastCopy_Dirty, LOD) {
+        copyRequestDataToLLC;
         sendPutAck;
         xyzRemoveSharer;
         popRequestQueue;
         markLLCDone;
-    }
-
-    transition(S, PutS_LastCopy_Dirty_WriteThrough, LOD_to_LOC_await_ack) {
-        sendDataToMem;
-        sendPutAck;
-        xyzUnsetIsDirty;
-        xyzRemoveSharer;
-        popRequestQueue;
     }
 
     transition(S, Upgrade, M) {
@@ -699,15 +694,6 @@ MessageBuffer *responseFromMemory;
         xyzClearOwner;
         popRequestQueue;
         markLLCDone;
-    }
-
-    transition(M, PutM_WriteThrough, LOD_to_LOC_await_ack) {
-        copyRequestDataToLLC;
-        sendDataToMem;
-        sendPutAck;
-        xyzUnsetIsDirty;
-        xyzClearOwner;
-        popRequestQueue;
     }
 
     // transitions for NI
@@ -798,11 +784,11 @@ MessageBuffer *responseFromMemory;
     }
 
     transition(S_NI, PutS_LastCopy_Dirty_NI_BypassLLC, DirtyNI_to_I_await_ack) {
+        setNITransientStateTo_DirtyNI_to_I_await_ack;
         sendDataToMem;
         sendPutAck;
         xyzUnsetIsDirty;
         xyzRemoveSharer;
-        setNITransientStateTo_DirtyNI_to_I_await_ack;
         popRequestQueue;
     }
 
