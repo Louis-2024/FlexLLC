@@ -847,14 +847,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       sendPutS;
   }
 
-
-  transition(SM_AD, DataDirAcks, SM_A) {
-      writeDataToCache;
-      storeAcksFromResp;
-      popResponseQueue;
-      // kd_wakeUpDependents;
-  }
-
   transition(M, Store, M_P) {
       storeHit;
       popMandatoryQueue;
