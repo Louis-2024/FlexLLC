@@ -248,20 +248,18 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                   }
               } else {
                   if (in_msg.Type == CoherenceResponseType:Data) {
-                      if (in_msg.UpgradeToM) {
-                          if (in_msg.Acks + tbe.AcksOutstanding == 0) {
-                              DPRINTF(FlexLLC, "(%s) (OwnerDataNoAcks: Address = %#x, Sender = %s) \n", machineID, in_msg.addr, in_msg.Sender);
-                              trigger(Event:OwnerDataNoAcks, in_msg.addr, cache_entry, tbe);
-                          } else if (in_msg.Acks + tbe.AcksOutstanding > 0) {
-                              DPRINTF(FlexLLC, "(%s) (OwnerDataAcks: Address = %#x, Sender = %s) \n", machineID, in_msg.addr, in_msg.Sender);
-                              trigger(Event:OwnerDataAcks, in_msg.addr, cache_entry, tbe);
-                          } else {
-                              assert(false);
-                          }
-                      } else {
-                          DPRINTF(FlexLLC, "(%s) (SharerData: Address = %#x, Sender = %s) \n", machineID, in_msg.addr, in_msg.Sender);
-                          trigger(Event:SharerData, in_msg.addr, cache_entry, tbe);
-                      }
+                    DPRINTF(FlexLLC, "(%s) (SharerData: Address = %#x, Sender = %s) \n", machineID, in_msg.addr, in_msg.Sender);
+                    trigger(Event:SharerData, in_msg.addr, cache_entry, tbe);
+                  } else if (in_msg.Type == CoherenceResponseType:ExData) {
+                    if (in_msg.Acks + tbe.AcksOutstanding == 0) {
+                      DPRINTF(FlexLLC, "(%s) (OwnerDataNoAcks: Address = %#x, Sender = %s) \n", machineID, in_msg.addr, in_msg.Sender);
+                      trigger(Event:OwnerDataNoAcks, in_msg.addr, cache_entry, tbe);
+                    } else if (in_msg.Acks + tbe.AcksOutstanding > 0) {
+                      DPRINTF(FlexLLC, "(%s) (OwnerDataAcks: Address = %#x, Sender = %s) \n", machineID, in_msg.addr, in_msg.Sender);
+                      trigger(Event:OwnerDataAcks, in_msg.addr, cache_entry, tbe);
+                    } else {
+                      assert(false);
+                    }
                   } else if (in_msg.Type == CoherenceResponseType:InvAck) {
                       if (tbe.AcksOutstanding == 1) {
                           DPRINTF(FlexLLC, "(%s) (LastInvAck: Address = %#x, Sender = %s) \n", machineID, in_msg.addr, in_msg.Sender);
@@ -402,12 +400,11 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       peek(forward_in, RequestMsg) {
           enqueue(response_out, ResponseMsg, 1) {
               out_msg.addr := address;
-              out_msg.Type := CoherenceResponseType:Data;
+              out_msg.Type := CoherenceResponseType:ExData;
               out_msg.Destination.add(in_msg.Requestor);
               out_msg.DataBlk := cache_entry.DataBlk;
               out_msg.MessageSize := MessageSizeType:Data;
               out_msg.Sender := machineID;
-              out_msg.UpgradeToM := true;
               out_msg.Acks := in_msg.Acks;
           }
           DPRINTF(FlexLLC, "(%s) (SendPutS: Address = %#x, Sender = %s, Destination = %s) \n", machineID, address, machineID, in_msg.Requestor); 
@@ -424,7 +421,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
               out_msg.DataBlk := cache_entry.DataBlk;
               out_msg.MessageSize := MessageSizeType:Data;
               out_msg.Sender := machineID;
-              out_msg.UpgradeToM := false;
           }
           DPRINTF(FlexLLC, "(%s) (SendCacheDataToReqAsS: Address = %#x, Sender = %s, Destination = %s) \n", machineID, address, machineID, in_msg.Requestor); 
       }
@@ -704,6 +700,44 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       popForwardQueue;
   }
 
+	// stall
+
+	transition({I,M,S,SI_A,II_A,SM_AD,IM_AD,IM_A,SM_A,MI_A}, Stall) {
+    stallingAlarm;
+    stall;
+  }
+
+  transition({IS_D, IM_AD, IM_A}, {Load, Store, Replacement}) {
+    stall;
+  }
+
+  transition({SM_AD, SM_A}, {Store, Replacement}) {
+      stall;
+  }
+
+  transition({MI_A, SI_A, II_A, MP_D}, {Load, Store, Replacement}) {
+      stall;
+  }
+
+	// Inv
+
+  transition(S, Inv, I) {
+      sendInvToL0;
+      sendInvAcktoReq;
+      deallocateCacheBlock;
+      popForwardQueue;
+  }
+
+  transition(SM_AD, Inv, IM_AD) {
+      sendInvAcktoReq;
+      popForwardQueue;
+  }
+
+  transition(SI_A, Inv, II_A) {
+      sendInvAcktoReq;
+      popForwardQueue;
+  }
+
   // other transitions
 
   transition(I, Load, IS_D) {
@@ -719,14 +753,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     allocateTBE;
     sendGetM;
     popMandatoryQueue;
-  }
-
-  transition(IS_D, {Load, Store, Replacement}) {
-    stall;
-  }
-  
-  transition(IS_D, Inv) {
-    stall_fwd;
   }
 
   transition(IS_D, OwnerDataNoAcks, M_P) {
@@ -756,10 +782,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     kd_wakeUpDependents;
   }
 
-  transition({IM_AD, IM_A}, {Load, Store, Replacement}) {
-    stall;
-  }
-
   transition({SM_AD, IM_AD}, OwnerDataNoAcks, M_P) {
       toc;
       writeDataToCache;
@@ -787,9 +809,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   transition(IM_AD, DataDirAcks, IM_A) {
       writeDataToCache;
       storeAcksFromResp;
-      // popResponseQueue;
       popResponseQueue;
-      // kd_wakeUpDependents;
   }
 
   transition({IM_A, SM_A, IM_AD, SM_AD}, InvAck) {
@@ -827,22 +847,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       sendPutS;
   }
 
-  transition(S, Inv, I) {
-      sendInvToL0;
-      sendInvAcktoReq;
-      deallocateCacheBlock;
-      popForwardQueue;
-  }
-
-  transition({SM_AD, SM_A}, {Store, Replacement}) {
-      stall;
-  }
-
-  transition(SM_AD, Inv, IM_AD) {
-      sendInvAcktoReq;
-      popForwardQueue;
-      // kd_wakeUpDependents;
-  }
 
   transition(SM_AD, DataDirAcks, SM_A) {
       writeDataToCache;
@@ -870,20 +874,10 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     sendInvToL0;
   }
 
-  transition({MI_A, SI_A, II_A, MP_D}, {Load, Store, Replacement}) {
-      stall;
-  }
-
   transition({MI_A, SI_A, II_A}, PutAck, I) {
       deallocateCacheBlock;
       popForwardQueue;
       kd_wakeUpDependents;
-  }
-
-  transition(SI_A, Inv, II_A) {
-      sendInvAcktoReq;
-      popForwardQueue;
-      // kd_wakeUpDependents;
   }
 
   transition(M_P, PutM, M) {
@@ -900,11 +894,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     writebackRespDataToCache;
     popL0ResponseQueue;
     kd_wakeUpDependents;
-  }
-
-  transition({I,M,S,SI_A,II_A,SM_AD,IM_AD,IM_A,SM_A,MI_A}, Stall) {
-    stallingAlarm;
-    stall;
   }
 
   transition(SM_AD, UpgradeNoAcks, M_P) {
