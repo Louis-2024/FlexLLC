@@ -628,15 +628,16 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   transition(S, Store, SM_D) {
     tic;
     allocateTBE;
-    sendUpgradeToLLC;
+    sendGetM;
     popMandatoryQueue;
   }
 
-  transition(SM_D, UpgradeAck, M_P) {
+  transition(SM_D, DirectoryData, M_P) {
     toc;
+    writeDataToCache;
     deallocateTBE;
     externalStoreHit;
-    popForwardQueue;
+    popResponseQueue;
     kd_wakeUpDependents;
   }
 

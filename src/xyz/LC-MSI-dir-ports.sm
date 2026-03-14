@@ -30,48 +30,22 @@
                 TBE victim_tbe := TBEs[victim_addr];
                 xyzCacheMemory.printMetadata(in_msg.addr);
 
-                if (getState(victim_tbe, victim_entry, victim_addr) == State:LOD_to_LOC_await_ack_await_allocation) {
-                    stall_and_wait(request_in, victim_addr);
+                if(in_msg.Type == CoherenceRequestType:GetS) {
+                            DPRINTF(FlexLLC, "GetS_NI: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:GetS_NI, in_msg.addr, e, tbe);
+                } else if (in_msg.Type == CoherenceRequestType:GetM) {
+                            DPRINTF(FlexLLC, "GetM_NI: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:GetM_NI, in_msg.addr, e, tbe);
+                } else if (in_msg.Type == CoherenceRequestType:PutS) {
+                            DPRINTF(FlexLLC, "PutS_NI: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:PutS_NI, in_msg.addr, e, tbe);
+                } else if (in_msg.Type == CoherenceRequestType:PutM) {
+                            DPRINTF(FlexLLC, "PutM_NI: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                            trigger(Event:PutM_NI, in_msg.addr, e, tbe);
                 } else {
-                    if(in_msg.Type == CoherenceRequestType:GetS) {
-
-                                DPRINTF(FlexLLC, "GetS_NI: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                                trigger(Event:GetS_NI, in_msg.addr, e, tbe);
-
-                    } else if (in_msg.Type == CoherenceRequestType:GetM) {
-
-                                DPRINTF(FlexLLC, "GetM_NI_From_NonSharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                                trigger(Event:GetM_NI_From_NonSharer, in_msg.addr, e, tbe);
-
-                    } else if (in_msg.Type == CoherenceRequestType:PutS) {
-                        if (!xyzCacheMemory.getSharers(in_msg.addr).isElement(in_msg.Requestor)) {
-                            DPRINTF(FlexLLC, "Put_InvalidReq: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                            trigger(Event:Put_InvalidReq, in_msg.addr, e, tbe);
-                        } else {
-
-                                DPRINTF(FlexLLC, "PutS_LastCopy_Clean_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                                trigger(Event:PutS_LastCopy_Clean_NI_BypassLLC, in_msg.addr, e, tbe);
-
-                        }
-                    } else if (in_msg.Type == CoherenceRequestType:PutM) {
-                        if (!xyzCacheMemory.getOwner(in_msg.addr).isElement(in_msg.Requestor)) {
-                            DPRINTF(FlexLLC, "Put_InvalidReq: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                            trigger(Event:Put_InvalidReq, in_msg.addr, e, tbe);
-                        } else {
-
-                                DPRINTF(FlexLLC, "PutM_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                                trigger(Event:PutM_NI_BypassLLC, in_msg.addr, e, tbe);
-
-                        }
-                    } else if (in_msg.Type == CoherenceRequestType:Upgrade) {
-
-                                DPRINTF(FlexLLC, "Upgrade: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                                trigger(Event:Upgrade, in_msg.addr, e, tbe);
-
-                    } else {
-                        assert(false);
-                    }
+                    assert(false);
                 }
+
             }
         }
     }

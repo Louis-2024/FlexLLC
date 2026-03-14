@@ -28,58 +28,21 @@ MessageBuffer *requestToMemory;
 MessageBuffer *responseFromMemory;
 {
     state_declaration(State, desc="Directory states", default="Directory_State_I") {
-        // stable states
-        M, AccessPermission:Busy, desc="";
-        S, AccessPermission:Read_Only, desc="";
         I, AccessPermission:Read_Write, desc="";
-        LOC, AccessPermission:Read_Write, desc="LLC_Only_Clean";
-        LOD, AccessPermission:Read_Write, desc="LLC_Only_Dirty";
-        
         M_NI, AccessPermission:Invalid, desc="";
         S_NI, AccessPermission:Invalid, desc="";
-
-        // transient states
-        I_to_S_await_mem_data, AccessPermission:Busy, desc="";
-        I_to_M_await_mem_data, AccessPermission:Busy, desc="";
-        LOD_to_LOC_await_ack, AccessPermission:Read_Only, desc="";
-        LOD_to_LOC_await_ack_await_allocation, AccessPermission:Read_Only, desc="";
-
         I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
         I_to_M_await_mem_data_NI, AccessPermission:Busy, desc="";
         DirtyNI_to_I_await_ack, AccessPermission:Read_Only, desc="";
     }
 
     enumeration(Event, desc="Directory events") {
-        GetS, desc="";
-        GetM_From_NonSharer, desc="";
-        GetM_From_Sharer, desc="";
-
         GetS_NI, desc="";
-        GetM_NI_From_NonSharer, desc="";
-        GetM_NI_From_Sharer, desc="";
-
-        PutS_NotLastCopy, desc="";
-        PutS_LastCopy_Clean, desc="";
-        PutS_LastCopy_Dirty, desc="";
-        PutS_LastCopy_Dirty_WriteThrough, desc="";
-        PutM, desc="";
-        PutM_WriteThrough, desc="";
-        PutLOD, desc="";
-        Put_InvalidReq, dest="";
-
-        PutS_NotLastCopy_NI_BypassLLC, desc="";
-        PutS_NotLastCopy_NI_InsertToLLC, desc="";
-        PutS_LastCopy_Clean_NI_BypassLLC, desc="";
-        PutS_LastCopy_Clean_NI_InsertToLLC, desc="";
-        PutS_LastCopy_Dirty_NI_BypassLLC, desc="";
-        PutS_LastCopy_Dirty_NI_InsertToLLC, desc="";
-        PutM_NI_BypassLLC, desc="";
-        PutM_NI_InsertToLLC, desc="";
-
+        GetM_NI, desc="";
+        PutS_NI, desc="";
+        PutM_NI, desc="";
         MemData, desc="";
         MemAck, desc="";
-        Sync, desc="";
-        Upgrade, desc="";
     }
 
     // structures
@@ -448,11 +411,6 @@ MessageBuffer *responseFromMemory;
 
     // transitions
 
-    transition({S, S_NI, M, M_NI}, Put_InvalidReq) {
-        sendPutAck;
-        popRequestQueue;
-        markLLCDone;
-    }
 
     // 1. transitions from LOC / LOD
 
@@ -473,7 +431,7 @@ MessageBuffer *responseFromMemory;
         popRequestQueue;
     }
 
-    transition(I, GetM_NI_From_NonSharer, I_to_M_await_mem_data_NI) {
+    transition(I, GetM_NI, I_to_M_await_mem_data_NI) {
         xyzAddOwnerNI;
         xyzSetIsDirty;
         setNITransientStateTo_I_to_M_await_mem_data_NI;
@@ -497,14 +455,13 @@ MessageBuffer *responseFromMemory;
 
     // 6. transitions for S_NI
 
-    transition(S_NI, Upgrade, M_NI) {
-        // todo: add invalidations
-        sendUpgradeAckToReq;
-        xyzClearSharers;
+    transition(S_NI, GetM_NI, I_to_M_await_mem_data_NI) {
+        xyzDeallocateMetadataNI;
         xyzAddOwnerNI;
         xyzSetIsDirty;
+        setNITransientStateTo_I_to_M_await_mem_data_NI;
+        sendMemRead;
         popRequestQueue;
-        markLLCDone;
     }
 
     transition(DirtyNI_to_I_await_ack, MemAck, I) {
@@ -515,25 +472,17 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
-    transition(S_NI, PutS_LastCopy_Clean_NI_BypassLLC, I) {
+    transition(S_NI, PutS_NI, I) {
         sendPutAck;
         xyzDeallocateMetadataNI;
         popRequestQueue;
         markLLCDone;
     }
 
-    transition(S_NI, PutS_LastCopy_Dirty_NI_BypassLLC, DirtyNI_to_I_await_ack) {
-        setNITransientStateTo_DirtyNI_to_I_await_ack;
-        sendDataToMem;
-        sendPutAck;
-        xyzUnsetIsDirty;
-        xyzRemoveSharer;
-        popRequestQueue;
-    }
 
     // 7. transitions for M_NI
 
-    transition(M_NI, PutM_NI_BypassLLC, DirtyNI_to_I_await_ack) {
+    transition(M_NI, PutM_NI, DirtyNI_to_I_await_ack) {
         setNITransientStateTo_DirtyNI_to_I_await_ack;
         sendDataToMem;
         xyzUnsetIsDirty;
