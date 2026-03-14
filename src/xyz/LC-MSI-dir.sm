@@ -29,7 +29,7 @@ MessageBuffer *responseFromMemory;
 {
     state_declaration(State, desc="Directory states", default="Directory_State_I") {
         // stable states
-        M, AccessPermission:Invalid, desc="";
+        M, AccessPermission:Busy, desc="";
         S, AccessPermission:Read_Only, desc="";
         I, AccessPermission:Read_Write, desc="";
         LOC, AccessPermission:Read_Write, desc="LLC_Only_Clean";
@@ -46,7 +46,7 @@ MessageBuffer *responseFromMemory;
 
         I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
         I_to_M_await_mem_data_NI, AccessPermission:Busy, desc="";
-        DirtyNI_to_I_await_ack, AccessPermission:Busy, desc="";
+        DirtyNI_to_I_await_ack, AccessPermission:Read_Only, desc="";
     }
 
     enumeration(Event, desc="Directory events") {
@@ -61,9 +61,7 @@ MessageBuffer *responseFromMemory;
         PutS_NotLastCopy, desc="";
         PutS_LastCopy_Clean, desc="";
         PutS_LastCopy_Dirty, desc="";
-        PutS_LastCopy_Dirty_WriteThrough, desc="";
         PutM, desc="";
-        PutM_WriteThrough, desc="";
         PutLOD, desc="";
         Put_InvalidReq, dest="";
 
@@ -656,14 +654,6 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
-    transition(S, PutS_LastCopy_Dirty_WriteThrough, LOD_to_LOC_await_ack) {
-        sendDataToMem;
-        sendPutAck;
-        xyzUnsetIsDirty;
-        xyzRemoveSharer;
-        popRequestQueue;
-    }
-
     // 4. transitions from M
 
     transition(M, GetS) {
@@ -688,15 +678,6 @@ MessageBuffer *responseFromMemory;
         xyzClearOwner;
         popRequestQueue;
         markLLCDone;
-    }
-
-    transition(M, PutM_WriteThrough, LOD_to_LOC_await_ack) {
-        copyRequestDataToLLC;
-        sendDataToMem;
-        sendPutAck;
-        xyzUnsetIsDirty;
-        xyzClearOwner;
-        popRequestQueue;
     }
 
     // transitions for NI

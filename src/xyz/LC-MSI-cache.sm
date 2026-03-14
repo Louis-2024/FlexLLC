@@ -31,14 +31,14 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                 desc="Invalid, moving to S, waiting for data";
     IM_AD,  AccessPermission:Busy,
                 desc="Invalid, moving to M, waiting for acks and data";
-    IM_A,   AccessPermission:Read_Only,
+    IM_A,   AccessPermission:Busy,
                 desc="Invalid, moving to M, waiting for acks";
 
     S,      AccessPermission:Read_Only,
                 desc="Shared. Read-only, other caches may have the block";
 
     // States moving out of S
-    SM_AD,  AccessPermission:Busy,
+    SM_AD,  AccessPermission:Read_Only,
                 desc="Shared, moving to M, waiting for acks and 'data'";
     SM_A,   AccessPermission:Read_Only,
                 desc="Shared, moving to M, waiting for acks";
@@ -513,15 +513,14 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   action(storeHit, "Sh", desc="Store hit") {
     assert(is_valid(cache_entry));
     cacheMemory.setMRU(cache_entry);
-    // The same as the read callback above.
     enqueue(responseToL0_out, ResponseMsg, 1) {
         out_msg.addr := address;
         out_msg.DataBlk := cache_entry.DataBlk;
-        out_msg.Type := CoherenceResponseType:Data;
+        out_msg.Type := CoherenceResponseType:ExData;
         out_msg.Destination.add(createMachineID(MachineType:L0Cache, version));
         out_msg.MessageSize := MessageSizeType:Data;
     }
-}
+  }
 
   action(externalStoreHit, "xShd", desc="External store hit (was a miss)") {
       assert(is_valid(cache_entry));
@@ -529,7 +528,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       enqueue(responseToL0_out, ResponseMsg, 1) {
           out_msg.addr := address;
           out_msg.DataBlk := cache_entry.DataBlk;
-          out_msg.Type := CoherenceResponseType:Data;
+          out_msg.Type := CoherenceResponseType:ExData;
           out_msg.Destination.add(createMachineID(MachineType:L0Cache, version));
           out_msg.MessageSize := MessageSizeType:Data;
       }

@@ -15,20 +15,11 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     MessageBuffer * mandatoryQueue;
 {
   state_declaration(State, desc="Cache states") {
-    I,      AccessPermission:Invalid, desc="Not present/Invalid";
-
-    // States moving out of I
-    IS_D,   AccessPermission:Busy,
-                desc="Invalid, moving to S, waiting for data";
-    IM_D,   AccessPermission:Busy,
-                desc="Invalid, moving to M, waiting for acks";
-
-    S,      AccessPermission:Read_Only,
-                desc="Shared. Read-only, other caches may have the block";
-
-    M,      AccessPermission:Read_Write,
-                desc="Modified. Read & write permissions. Owner of block";
-
+    I, AccessPermission:Invalid, desc="Not present/Invalid";
+    IS_D, AccessPermission:Busy, desc="Invalid, moving to S, waiting for data";
+    IM_D, AccessPermission:Busy, desc="Invalid, moving to M, waiting for acks";
+    S, AccessPermission:Read_Only, desc="Shared. Read-only, other caches may have the block";
+    M, AccessPermission:Read_Write, desc="Modified. Read & write permissions. Owner of block";
   }
 
   enumeration(Event, desc="Cache events") {
@@ -217,28 +208,22 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   in_port(mandatory_in, RubyRequest, mandatoryQueue) {
     if(mandatory_in.isReady(clockEdge())) {
       peek(mandatory_in, RubyRequest) {
-        // Should not trigger here
         TBE tbe := TBEs[in_msg.LineAddress];
         Entry cache_entry := getCacheEntry(in_msg.LineAddress);
         if(TBEs.cnt() > 0) {
-            // only 1 outstanding request
-            // TODO: relax this constraint
-            trigger(Event:Stall, in_msg.LineAddress, cache_entry,
-                    tbe);
+            trigger(Event:Stall, in_msg.LineAddress, cache_entry, tbe);
         }
         Entry Icache_entry := getICacheEntry(in_msg.LineAddress);
         Entry Dcache_entry := getDCacheEntry(in_msg.LineAddress);
         if(in_msg.Type == RubyRequestType:IFETCH) {
             // INSTR access
             if(is_valid(Icache_entry)) {
-                // hit
                 trigger(Event:Ifetch, in_msg.LineAddress, Icache_entry, tbe);
             } else {
-                if(is_valid(Dcache_entry)) { // wrong
-                    trigger(Event:Replacement, in_msg.LineAddress, Dcache_entry, tbe);
+                if(is_valid(Dcache_entry)) {
+                    assert(false);
                 }
                 if(ICache.cacheAvail(in_msg.LineAddress)) {
-                    // or miss
                     trigger(Event:Ifetch, in_msg.LineAddress, Icache_entry, tbe);
                 } else {
                     Addr addr := ICache.cacheProbe(in_msg.LineAddress);
@@ -249,20 +234,18 @@ machine(MachineType:L0Cache, "LC-MSI cache")
         } else {
             // Data access
             if(is_valid(Dcache_entry)) {
-                trigger(
-                    mandatory_request_type_to_event(in_msg.Type),
-                        in_msg.LineAddress, Dcache_entry, tbe);
-            } else if(is_valid(Icache_entry)) {
-                trigger(Event:Replacement, in_msg.LineAddress, Icache_entry, tbe);
-            } else if(DCache.cacheAvail(in_msg.LineAddress)) {
-                trigger(
-                    mandatory_request_type_to_event(in_msg.Type),
-                        in_msg.LineAddress, Dcache_entry, tbe);
+                trigger(mandatory_request_type_to_event(in_msg.Type), in_msg.LineAddress, Dcache_entry, tbe);
             } else {
-                // victim
-                Addr addr := DCache.cacheProbe(in_msg.LineAddress);
-                check_on_cache_probe(mandatory_in, addr);
-                trigger(Event:Replacement, addr, getDCacheEntry(addr), TBEs[addr]);
+                if(is_valid(Icache_entry)) {
+                    assert(false);
+                }
+                if(DCache.cacheAvail(in_msg.LineAddress)) {
+                    trigger(mandatory_request_type_to_event(in_msg.Type), in_msg.LineAddress, Dcache_entry, tbe);
+                } else {
+                    Addr addr := DCache.cacheProbe(in_msg.LineAddress);
+                    check_on_cache_probe(mandatory_in, addr);
+                    trigger(Event:Replacement, addr, getDCacheEntry(addr), TBEs[addr]);
+                }
             }
         }
       }
@@ -381,6 +364,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
   action(storeHit, "Sh", desc="Store hit") {
     assert(is_valid(cache_entry));
+    assert(!ICache.isTagPresent(address));
     DCache.setMRU(cache_entry);
     // The same as the read callback above.
     DPRINTF(RubySlicc, "%#x: before cache_entry.DataBlk: %s\n", address, cache_entry.DataBlk);
@@ -390,6 +374,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
 
   action(externalStoreHit, "xSh", desc="External store hit (was a miss)") {
       assert(is_valid(cache_entry));
+      assert(!ICache.isTagPresent(address));
       peek(response_in, ResponseMsg) {
           DCache.setMRU(cache_entry);
           DPRINTF(RubySlicc, "%#x: before cache_entry.DataBlk: %s\n", address, cache_entry.DataBlk);
@@ -408,11 +393,13 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   action(allocateICacheBlock, "ai", desc="Allocate a cache block") {
     assert(is_invalid(cache_entry));
     assert(ICache.cacheAvail(address));
+    assert(!DCache.isTagPresent(address));
     set_cache_entry(ICache.allocate(address, new Entry));
   }
   action(allocateDCacheBlock, "ad", desc="Allocate a cache block") {
     assert(is_invalid(cache_entry));
     assert(DCache.cacheAvail(address));
+    assert(!ICache.isTagPresent(address));
     set_cache_entry(DCache.allocate(address, new Entry));
   }
 
@@ -510,7 +497,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     popMandatoryQueue;
   }
 
-  transition(IS_D, {Load, Store, Replacement}) {
+  transition({IS_D, IM_D}, {Load, Store, Replacement}) {
     stall;
   }
   transition({IS_D, IM_D}, Inv) {
@@ -518,27 +505,22 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
   transition(IS_D, Data, S) {
     toc;
-        writeDataToCache;
-        deallocateTBE;
-        externalLoadHit;
-        popResponseQueue;
+    writeDataToCache;
+    deallocateTBE;
+    externalLoadHit;
+    popResponseQueue;
     kd_wakeUpDependents;
   }
   transition(IS_D, ExData, M) {
     toc;
-        writeDataToCache;
-        deallocateTBE;
-        externalLoadHit;
-        popResponseQueue;
+    writeDataToCache;
+    deallocateTBE;
+    externalLoadHit;
+    popResponseQueue;
     kd_wakeUpDependents;
   }
 
-  
-  // transition({IM_AD, IM_A}, {Load, Store, Replacement}) {
-  //   stall;
-  // }
-
-  transition(IM_D, Data, M) {
+  transition(IM_D, ExData, M) {
     toc;
       writeDataToCache;
       deallocateTBE;
@@ -554,8 +536,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
 
   transition(S, Store, IM_D) {
     tic;
-      deallocateCacheBlock;
-      allocateDCacheBlock;
       allocateTBE;
       sendGetM;
       popMandatoryQueue;
