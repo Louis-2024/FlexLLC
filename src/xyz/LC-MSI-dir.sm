@@ -456,108 +456,11 @@ MessageBuffer *responseFromMemory;
 
     // 1. transitions from LOC / LOD
 
-    transition(LOD_to_LOC_await_ack_await_allocation, MemAck, LOC) {
-        popMemQueue;
-        wakeUpBuffers;
-    }
-
-    transition(LOD_to_LOC_await_ack, MemAck, LOC) {
-        popMemQueue;
-        wakeUpBuffers;
-        markLLCDone;
-    }
-
-    transition({LOC, LOD}, GetS, S) {
-        xyzAddSharer;
-        sendLLCDataToReq;
-        popRequestQueue;
-        markLLCDone_await_data;
-    }
-
-    transition({LOC, LOD}, GetM_From_NonSharer, M) {
-        xyzAddOwner;
-        xyzSetIsDirty;
-        sendLLCDataToReq;
-        popRequestQueue;
-        markLLCDone_await_data;
-    }
-
     // 2. transitions from I
-
-    transition(I, GetS, I_to_S_await_mem_data) {
-        allocateCacheBlock;
-        xyzAddSharer;
-        sendMemRead;
-        popRequestQueue;
-    }
-
-    transition(I, GetM_From_NonSharer, I_to_M_await_mem_data) {
-        allocateCacheBlock;
-        xyzAddOwner;
-        xyzSetIsDirty;
-        sendMemRead;
-        popRequestQueue;
-    }
-
-    transition(I_to_S_await_mem_data, MemData, S) {
-        sendMemDataToReq;
-        writeMemDataToLLC;
-        popMemQueue;
-        markLLCDone_await_data;
-    }
-
-    transition(I_to_M_await_mem_data, MemData, M) {
-        sendMemDataToReq;
-        writeMemDataToLLC;
-        popMemQueue;
-        markLLCDone_await_data;
-    }
 
     // 3. transitions from S
 
-    transition(S, GetM_From_Sharer, M) {
-        xyzRemoveSharer;
-        sendUpgradeToReq;
-        xyzClearSharers;
-        xyzAddOwner;
-        xyzSetIsDirty;
-        popRequestQueue;
-        markLLCDone_await_data;
-    }
-
-    transition(S, PutS_LastCopy_Clean, LOC) {
-        sendPutAck;
-        xyzRemoveSharer;
-        popRequestQueue;
-        markLLCDone;
-    }
-
-    transition(S, PutS_LastCopy_Dirty, LOD) {
-        sendPutAck;
-        xyzRemoveSharer;
-        popRequestQueue;
-        markLLCDone;
-    }
-
-    transition(S, Upgrade, M) {
-        // todo: add invalidations
-        sendUpgradeAckToReq;
-        xyzClearSharers;
-        xyzAddOwner;
-        xyzSetIsDirty;
-        popRequestQueue;
-        markLLCDone;
-    }
-
     // 4. transitions from M
-
-    transition(M, PutM, LOD) {
-        copyRequestDataToLLC;
-        sendPutAck;
-        xyzClearOwner;
-        popRequestQueue;
-        markLLCDone;
-    }
 
     // transitions for NI
 
@@ -626,26 +529,6 @@ MessageBuffer *responseFromMemory;
         xyzUnsetIsDirty;
         xyzRemoveSharer;
         popRequestQueue;
-    }
-
-    transition(S_NI, PutS_LastCopy_Dirty_NI_InsertToLLC, LOD) {
-        sendPutAck;
-        xyzRemoveSharer;
-        allocateCacheBlock;
-        copyRequestDataToLLC;
-        xyzConvertNILineToIN;
-        popRequestQueue;
-        markLLCDone;
-    }
-
-    transition(S_NI, GetM_NI_From_Sharer, M_NI) {
-        xyzRemoveSharer;
-        sendUpgradeToReq;
-        xyzClearSharers;
-        xyzAddOwnerNI;
-        xyzSetIsDirty;
-        popRequestQueue;
-        markLLCDone_await_data;
     }
 
     // 7. transitions for M_NI
