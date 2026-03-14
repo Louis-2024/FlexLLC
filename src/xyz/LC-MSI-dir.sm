@@ -242,75 +242,6 @@ MessageBuffer *responseFromMemory;
         DPRINTF(FlexLLC, "[SendLLCDataToMem: Address = %#x, Sender = %s] \n", address, machineID);
     }
 
-    action(sendInvToSharersFromReq, desc="") {
-        peek(request_in, RequestMsg) {
-            enqueue(forward_out, RequestMsg, 1) {
-                out_msg.addr := address;
-                out_msg.Type := CoherenceRequestType:Inv;
-                out_msg.Requestor := in_msg.Requestor;
-                out_msg.Destination := xyzCacheMemory.getSharers(address);
-                out_msg.MessageSize := MessageSizeType:Control;
-            }
-            DPRINTF(FlexLLC, "[sendInvToSharersFromReq: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, xyzCacheMemory.getSharers(address));
-        }
-    }
-
-    action(sendInvToSharersFromLLC, desc="") {
-        peek(request_in, RequestMsg) {
-            enqueue(forward_out, RequestMsg, 1) {
-                out_msg.addr := address;
-                out_msg.Type := CoherenceRequestType:Inv;
-                out_msg.Requestor := machineID;
-                out_msg.Destination := xyzCacheMemory.getSharers(address);
-                out_msg.MessageSize := MessageSizeType:Control;
-            }
-            DPRINTF(FlexLLC, "[sendInvToSharersFromLLC: Address = %#x, Requestor = %s, Destination = %s] \n", address, machineID, xyzCacheMemory.getSharers(address));
-        }
-    }
-
-    action(sendFwdGetS, desc="") {
-        peek(request_in, RequestMsg) {
-            NetDest dest := xyzCacheMemory.getASharer(address);
-            enqueue(forward_out, RequestMsg, 1) {
-                out_msg.addr := address;
-                out_msg.Type := CoherenceRequestType:GetS;
-                out_msg.Requestor := in_msg.Requestor;
-                out_msg.Destination := dest;
-                out_msg.MessageSize := MessageSizeType:Control;
-            }
-            DPRINTF(FlexLLC, "[SendFwdGetS: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, dest);
-        }
-    }
-
-    action(sendFwdGetMFromM, desc="") {
-        peek(request_in, RequestMsg) {
-            NetDest dest := xyzCacheMemory.getOwner(address);
-            enqueue(forward_out, RequestMsg, 1) {
-                out_msg.addr := address;
-                out_msg.Type := CoherenceRequestType:GetM;
-                out_msg.Requestor := in_msg.Requestor;
-                out_msg.Destination := dest;
-                out_msg.MessageSize := MessageSizeType:Control;
-            }
-            DPRINTF(FlexLLC, "[SendFwdGetMFromM: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, dest);
-        }
-    }
-
-    action(sendFwdGetMFromS, desc="") {
-        peek(request_in, RequestMsg) {
-            NetDest dest := xyzCacheMemory.getASharer(address);
-            xyzCacheMemory.removeSharer(address, dest.smallestElement());
-            enqueue(forward_out, RequestMsg, 1) {
-                out_msg.addr := address;
-                out_msg.Type := CoherenceRequestType:GetM;
-                out_msg.Requestor := in_msg.Requestor;
-                out_msg.Destination := dest;
-                out_msg.MessageSize := MessageSizeType:Control;
-            }
-            DPRINTF(FlexLLC, "[SendFwdGetMFromS: Address = %#x, Requestor = %s, Destination = %s] \n", address, in_msg.Requestor, dest);
-        }
-    }
-
     action(sendUpgradeToReq, desc="") {
         peek(request_in, RequestMsg) {
             enqueue(forward_out, RequestMsg, 1) {
@@ -397,20 +328,6 @@ MessageBuffer *responseFromMemory;
 
     action(markLLCDone_await_data, desc="") {
         bus.markLLCDone(true);
-    }
-
-    action(markLLCDone_if_not_delayed, desc="") {
-        if(!delayMarkDone) {
-            bus.markLLCDone();
-        }
-    }
-
-    action(setDelayMarkDone, desc="") {
-        delayMarkDone := true;
-    }
-
-    action(unsetDelayMarkDone, desc="") {
-        delayMarkDone := false;
     }
 
     action(xyzAddSharer, desc="") {
@@ -539,19 +456,9 @@ MessageBuffer *responseFromMemory;
 
     // 1. transitions from LOC / LOD
 
-    transition(LOD, Sync, LOD_to_LOC_await_ack_await_allocation) {
-        sendLLCDataToMem;
-        xyzUnsetIsDirty;
-    }
-
     transition(LOD_to_LOC_await_ack_await_allocation, MemAck, LOC) {
         popMemQueue;
         wakeUpBuffers;
-    }
-
-    transition(LOD, PutLOD, LOD_to_LOC_await_ack) {
-        sendLLCDataToMem;
-        xyzUnsetIsDirty;
     }
 
     transition(LOD_to_LOC_await_ack, MemAck, LOC) {
@@ -608,27 +515,9 @@ MessageBuffer *responseFromMemory;
 
     // 3. transitions from S
 
-    transition(S, GetS) {
-        sendLLCDataToReq;
-        xyzAddSharer;
-        popRequestQueue;
-        markLLCDone_await_data;
-    }
-
-    transition(S, GetM_From_NonSharer, M) {
-        sendInvToSharersFromReq;
-        xyzClearSharers;
-        xyzAddOwner;
-        xyzSetIsDirty;
-        sendLLCDataToReq;
-        popRequestQueue;
-        markLLCDone_await_data;
-    }
-
     transition(S, GetM_From_Sharer, M) {
         xyzRemoveSharer;
         sendUpgradeToReq;
-        // sendInvToSharersFromReq;
         xyzClearSharers;
         xyzAddOwner;
         xyzSetIsDirty;
@@ -636,16 +525,7 @@ MessageBuffer *responseFromMemory;
         markLLCDone_await_data;
     }
 
-    transition(S, PutS_NotLastCopy) {
-        copyRequestDataToLLC;
-        sendPutAck;
-        xyzRemoveSharer;
-        popRequestQueue;
-        markLLCDone;
-    }
-
-    transition(S, PutS_LastCopy_Clean, LOD) {
-        copyRequestDataToLLC;
+    transition(S, PutS_LastCopy_Clean, LOC) {
         sendPutAck;
         xyzRemoveSharer;
         popRequestQueue;
@@ -653,7 +533,6 @@ MessageBuffer *responseFromMemory;
     }
 
     transition(S, PutS_LastCopy_Dirty, LOD) {
-        copyRequestDataToLLC;
         sendPutAck;
         xyzRemoveSharer;
         popRequestQueue;
@@ -671,22 +550,6 @@ MessageBuffer *responseFromMemory;
     }
 
     // 4. transitions from M
-
-    transition(M, GetS) {
-        sendFwdGetMFromM;
-        xyzClearOwner;
-        xyzAddOwner;
-        popRequestQueue;
-        markLLCDone;
-    }
-
-    transition(M, GetM_From_NonSharer) {
-        sendFwdGetMFromM;
-        xyzClearOwner;
-        xyzAddOwner;
-        popRequestQueue;
-        markLLCDone;
-    }
 
     transition(M, PutM, LOD) {
         copyRequestDataToLLC;
@@ -749,36 +612,9 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
-    transition(S_NI, PutS_NotLastCopy_NI_BypassLLC) {
-        sendPutAck;
-        xyzRemoveSharer;
-        popRequestQueue;
-        markLLCDone;
-    }
-
-    transition(S_NI, PutS_NotLastCopy_NI_InsertToLLC, S) {
-        sendPutAck;
-        xyzRemoveSharer;
-        allocateCacheBlock;
-        copyRequestDataToLLC;
-        xyzConvertNILineToIN;
-        popRequestQueue;
-        markLLCDone;
-    }
-
     transition(S_NI, PutS_LastCopy_Clean_NI_BypassLLC, I) {
         sendPutAck;
         xyzDeallocateMetadataNI;
-        popRequestQueue;
-        markLLCDone;
-    }
-
-    transition(S_NI, PutS_LastCopy_Clean_NI_InsertToLLC, LOC) {
-        sendPutAck;
-        xyzRemoveSharer;
-        allocateCacheBlock;
-        copyRequestDataToLLC;
-        xyzConvertNILineToIN;
         popRequestQueue;
         markLLCDone;
     }
@@ -802,27 +638,9 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
-    transition(S_NI, GetS_NI) {
-        sendFwdGetS;
-        xyzAddSharerNI;
-        popRequestQueue;
-        markLLCDone;
-    }
-
-    transition(S_NI, GetM_NI_From_NonSharer, M_NI) {
-        sendFwdGetMFromS;
-        sendInvToSharersFromReq;
-        xyzClearSharers;
-        xyzAddOwnerNI;
-        xyzSetIsDirty;
-        popRequestQueue;
-        markLLCDone;
-    }
-
     transition(S_NI, GetM_NI_From_Sharer, M_NI) {
         xyzRemoveSharer;
         sendUpgradeToReq;
-        sendInvToSharersFromReq;
         xyzClearSharers;
         xyzAddOwnerNI;
         xyzSetIsDirty;
@@ -832,22 +650,6 @@ MessageBuffer *responseFromMemory;
 
     // 7. transitions for M_NI
 
-    transition(M_NI, GetS_NI) {
-        sendFwdGetMFromM;
-        xyzClearOwner;
-        xyzAddOwnerNI;
-        popRequestQueue;
-        markLLCDone;
-    }
-    
-    transition(M_NI, GetM_NI_From_NonSharer) {
-        sendFwdGetMFromM;
-        xyzClearOwner;
-        xyzAddOwnerNI;
-        popRequestQueue;
-        markLLCDone;
-    }
-
     transition(M_NI, PutM_NI_BypassLLC, DirtyNI_to_I_await_ack) {
         setNITransientStateTo_DirtyNI_to_I_await_ack;
         sendDataToMem;
@@ -855,16 +657,6 @@ MessageBuffer *responseFromMemory;
         sendPutAck;
         xyzClearOwner;
         popRequestQueue;
-    }
-
-    transition(M_NI, PutM_NI_InsertToLLC, LOD) {
-        sendPutAck;
-        xyzClearOwner;
-        allocateCacheBlock;
-        copyRequestDataToLLC;
-        xyzConvertNILineToIN;
-        popRequestQueue;
-        markLLCDone;
     }
 
 }

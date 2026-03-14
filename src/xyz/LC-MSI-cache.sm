@@ -572,7 +572,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   }
   
 
-  // other transitions
+  // transitions
 
   transition(I, Load, IS_D) {
     tic;
