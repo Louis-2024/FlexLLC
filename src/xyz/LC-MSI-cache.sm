@@ -31,6 +31,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                 desc="Invalid, moving to M, waiting for acks and data";
     S,      AccessPermission:Read_Only,
                 desc="Shared. Read-only, other caches may have the block";
+    SI_AD, AccessPermission:Read_Only,desc="";
     SM_D,  AccessPermission:Read_Only,
                 desc="Shared, moving to M, waiting for acks and 'data'";
     M,      AccessPermission:Read_Write,
@@ -641,10 +642,16 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     kd_wakeUpDependents;
   }
 
-  transition(S, Replacement, SI_A) {
+  // todo
+  transition(S, Replacement, SI_AD) {
       sendInvToL0;
-      tic;
-      sendPutS;
+  }
+
+  transition(SI_AD, WB_Data, SI_A) {
+    tic;
+    sendPutS;
+    popL0ResponseQueue;
+    kd_wakeUpDependents;
   }
 
   transition(SM_D, {Store, Replacement}) {
@@ -669,7 +676,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     sendInvToL0;
   }
 
-  transition({MI_A, SI_A, II_A, MP_D}, {Load, Store, Replacement}) {
+  transition({MI_A, SI_A, II_A, MP_D, SI_AD}, {Load, Store, Replacement}) {
       stall;
   }
 
@@ -695,7 +702,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     kd_wakeUpDependents;
   }
 
-  transition({I,M,S,SI_A,II_A,MI_A,SM_D,IM_D}, Stall) {
+  transition({I,M,S,SI_A,II_A,MI_A,SM_D,IM_D,SI_AD}, Stall) {
     stallingAlarm;
     stall;
   }

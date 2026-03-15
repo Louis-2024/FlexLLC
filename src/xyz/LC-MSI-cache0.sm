@@ -343,6 +343,18 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     }
   }
 
+  action(sendInvAckToL1, desc="") {
+    peek(forward_in, RequestMsg) {
+      enqueue(response_out, ResponseMsg, 1) {
+        out_msg.addr := in_msg.addr;
+        out_msg.Type := CoherenceResponseType:Data;
+        out_msg.Destination.add(in_msg.Requestor);
+        out_msg.MessageSize := MessageSizeType:Data;
+        out_msg.Sender := machineID;
+      }
+    }
+  }
+
   action(loadHit, "Lh", desc="Load hit") {
     assert(is_valid(cache_entry));
     if (DCache.isTagPresent(address)) {
@@ -577,11 +589,13 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
 
   transition(S, Inv, I) {
+    sendInvAckToL1;
     deallocateCacheBlock;
     forwardEviction;
     popForwardQueue;
   }
   transition(I, Inv) {
+    sendInvAckToL1;
     popForwardQueue;
   }
 

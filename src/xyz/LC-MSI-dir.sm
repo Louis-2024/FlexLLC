@@ -33,7 +33,7 @@ MessageBuffer *responseFromMemory;
         S_NI, AccessPermission:Invalid, desc="";
         I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
         I_to_M_await_mem_data_NI, AccessPermission:Busy, desc="";
-        DirtyNI_to_I_await_ack, AccessPermission:Read_Only, desc="";
+        DirtyNI_to_I_await_ack, AccessPermission:Invalid, desc="";
     }
 
     enumeration(Event, desc="Directory events") {
