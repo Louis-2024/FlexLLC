@@ -270,6 +270,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
       out_msg.Requestor := machineID;
       out_msg.is_reordered := false;
     }
+    DPRINTF(FlexLLC, "(%s) (sendGetS: Address = %#x) \n", machineID, address);
   }
   action(sendGetM, "gM", desc="Send GetM to the directory") {
     enqueue(request_out, RequestMsg, 1) {
@@ -280,6 +281,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
         out_msg.Requestor := machineID;
         out_msg.is_reordered := false;
     }
+    DPRINTF(FlexLLC, "(%s) (sendGetM: Address = %#x) \n", machineID, address);
   }
 
   action(sendPutS, "pS", desc="Send PutS to the directory") {
@@ -413,14 +415,17 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     assert(is_invalid(cache_entry));
     assert(ICache.cacheAvail(address));
     set_cache_entry(ICache.allocate(address, new Entry));
+    DPRINTF(FlexLLC, "(%s) (allocateICacheBlock: Address = %#x) \n", machineID, address);
   }
   action(allocateDCacheBlock, "ad", desc="Allocate a cache block") {
     assert(is_invalid(cache_entry));
     assert(DCache.cacheAvail(address));
     set_cache_entry(DCache.allocate(address, new Entry));
+    DPRINTF(FlexLLC, "(%s) (allocateDCacheBlock: Address = %#x) \n", machineID, address);
   }
 
   action(deallocateCacheBlock, "d", desc="Deallocate a cache block") {
+    DPRINTF(FlexLLC, "(%s) (deallocateCacheBlock: Address = %#x) \n", machineID, address);
     assert(is_valid(cache_entry));
     // clear the cache_entry variable (now it's invalid)
     if (DCache.isTagPresent(address)) {
@@ -562,6 +567,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
 
   transition(SM_D, ExData, M) {
     toc;
+    writeDataToCache;
     deallocateTBE;
     externalStoreHit;
     popResponseQueue;

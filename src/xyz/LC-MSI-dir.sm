@@ -472,11 +472,13 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
-    transition(S_NI, PutS_NI, I) {
+    transition(S_NI, PutS_NI, DirtyNI_to_I_await_ack) {
+        setNITransientStateTo_DirtyNI_to_I_await_ack;
+        sendDataToMem;
+        xyzUnsetIsDirty;
         sendPutAck;
-        xyzDeallocateMetadataNI;
+        xyzClearSharers;
         popRequestQueue;
-        markLLCDone;
     }
 
 
