@@ -584,7 +584,6 @@ machine(MachineType:L0Cache, "LC-MSI cache")
 
   transition(SDMD_D, ExData, MD) {
     toc;
-    writeDataToCache; // do we need this?
     deallocateTBE;
     externalStoreHit;
     popResponseQueue;

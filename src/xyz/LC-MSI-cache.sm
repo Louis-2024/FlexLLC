@@ -768,7 +768,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     kd_wakeUpDependents;
   }
 
-  transition({SM_AD, IM_AD}, OwnerDataNoAcks, M_P) {
+  transition(IM_AD, OwnerDataNoAcks, M_P) {
       toc;
       writeDataToCache;
       deallocateTBE;
@@ -783,7 +783,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       popResponseQueue;
   }
 
-  transition({IM_AD, SM_AD}, DataDirNoAcks, M_P) {
+  transition(IM_AD, DataDirNoAcks, M_P) {
       toc;
       writeDataToCache;
       deallocateTBE;
@@ -794,6 +794,19 @@ machine(MachineType:L1Cache, "LC-MSI cache")
 
   transition(IM_AD, DataDirAcks, IM_A) {
       writeDataToCache;
+      storeAcksFromResp;
+      popResponseQueue;
+  }
+
+  transition(SM_AD, DataDirNoAcks, M_P) {
+      toc;
+      deallocateTBE;
+      externalStoreHit;
+      popResponseQueue;
+      kd_wakeUpDependents;
+  }
+
+  transition(SM_AD, DataDirAcks, SM_A) {
       storeAcksFromResp;
       popResponseQueue;
   }
@@ -872,12 +885,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     writebackRespDataToCache;
     popL0ResponseQueue;
     kd_wakeUpDependents;
-  }
-
-  transition(SM_AD, DataDirAcks, SM_A) {
-    writeDataToCache;
-    storeAcksFromResp;
-    popResponseQueue;
   }
 
 }
