@@ -31,9 +31,10 @@ MessageBuffer *responseFromMemory;
         I, AccessPermission:Read_Write, desc="";
         M_NI, AccessPermission:Invalid, desc="";
         S_NI, AccessPermission:Invalid, desc="";
-        I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
-        I_to_M_await_mem_data_NI, AccessPermission:Busy, desc="";
+        I_to_S_await_mem_data_NI, AccessPermission:Invalid, desc="";
+        I_to_M_await_mem_data_NI, AccessPermission:Invalid, desc="";
         DirtyNI_to_I_await_ack, AccessPermission:Invalid, desc="";
+        DirtyNI_await_mem_read_compare, AccessPermission:Invalid, desc="Awaiting mem read to compare cache vs memory";
     }
 
     enumeration(Event, desc="Directory events") {
@@ -96,6 +97,11 @@ MessageBuffer *responseFromMemory;
             return State:I_to_M_await_mem_data_NI;
         } else if (xyzCacheMemory.getNIState(addr) == 5) {
             return State:DirtyNI_to_I_await_ack;
+        } else if (xyzCacheMemory.getNIState(addr) == 6) {
+            return State:DirtyNI_await_mem_read_compare;
+        } else {
+            assert(false);
+            return State:I;
         }
     }
 
@@ -355,6 +361,28 @@ MessageBuffer *responseFromMemory;
         memQueue_in.dequeue(clockEdge());
     }
 
+    action(allocateTBE, desc="") {
+        TBEs.allocate(address);
+        set_tbe(TBEs[address]);
+    }
+
+    action(deallocateTBE, desc="") {
+        TBEs.deallocate(address);
+        unset_tbe();
+    }
+
+    action(copyRequestDataBlkToTBE, desc="Store PutS cache DataBlk in TBE for later compare") {
+        peek(request_in, RequestMsg) {
+            tbe.DataBlk := in_msg.DataBlk;
+        }
+    }
+
+    action(checkDataBlkMatch, desc="Assert cache (TBE) DataBlk equals memory DataBlk") {
+        peek(memQueue_in, MemoryMsg) {
+            assert(tbe.DataBlk == in_msg.DataBlk);
+        }
+    }
+
     action(allocateCacheBlock, desc="") {
         set_cache_entry(xyzCacheMemory.allocate(address, new Entry));
     }
@@ -387,6 +415,10 @@ MessageBuffer *responseFromMemory;
 
     action(setNITransientStateTo_DirtyNI_to_I_await_ack, desc="") {
         xyzCacheMemory.setNITransientState(address, 5);
+    }
+
+    action(setNITransientStateTo_DirtyNI_await_mem_read_compare, desc="") {
+        xyzCacheMemory.setNITransientState(address, 6);
     }
 
     action(unsetNITransientState, desc="") {
@@ -472,15 +504,25 @@ MessageBuffer *responseFromMemory;
         markLLCDone;
     }
 
-    transition(S_NI, PutS_NI, DirtyNI_to_I_await_ack) {
-        setNITransientStateTo_DirtyNI_to_I_await_ack;
-        sendDataToMem;
-        xyzUnsetIsDirty;
+    transition(S_NI, PutS_NI, DirtyNI_await_mem_read_compare) {
+        setNITransientStateTo_DirtyNI_await_mem_read_compare;
+        allocateTBE;
+        copyRequestDataBlkToTBE;
+        sendMemRead;
         sendPutAck;
         xyzClearSharers;
         popRequestQueue;
     }
 
+    transition(DirtyNI_await_mem_read_compare, MemData, I) {
+        checkDataBlkMatch;
+        unsetNITransientState;
+        xyzDeallocateMetadataNI;
+        wakeUpBuffers;
+        deallocateTBE;
+        popMemQueue;
+        markLLCDone;
+    }
 
     // 7. transitions for M_NI
 

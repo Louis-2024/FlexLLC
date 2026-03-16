@@ -38,23 +38,23 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                 desc="Shared. Read-only, other caches may have the block";
 
     // States moving out of S
-    SM_AD,  AccessPermission:Read_Only,
+    SM_AD,  AccessPermission:Busy,
                 desc="Shared, moving to M, waiting for acks and 'data'";
-    SM_A,   AccessPermission:Read_Only,
+    SM_A,   AccessPermission:Busy,
                 desc="Shared, moving to M, waiting for acks";
 
     M,      AccessPermission:Read_Write,
                 desc="Modified. Read & write permissions. Owner of block";
-    M_P,      AccessPermission:Busy,
+    M_P,      AccessPermission:Invalid,
                 desc="Privately cached";
     MP_D,      AccessPermission:Busy,
                 desc="Privately cached, Inv sent, waiting for data";
     // States moving to Invalid
-    MI_A,   AccessPermission:Read_Only,
+    MI_A,   AccessPermission:Busy,
                 desc="Was modified, moving to I, waiting for put ack";
-    SI_A,   AccessPermission:Read_Only,
+    SI_A,   AccessPermission:Busy,
                 desc="Was shared, moving to I, waiting for put ack";
-    II_A,   AccessPermission:Invalid,
+    II_A,   AccessPermission:Busy,
                 desc="Sent valid data before receiving put ack. ";
                 // "Waiting for put ack.";
   }
@@ -306,10 +306,10 @@ machine(MachineType:L1Cache, "LC-MSI cache")
                     trigger(Event:Replacement, addr, victim_entry, victim_tbe);
                 } else {
                     if (in_msg.Type == CoherenceRequestType:GetS) {
-                        DPRINTF(FlexLLC, "(%s) (Load: Address = %#x, Requestor = %s) \n", machineID, in_msg.addr, in_msg.Requestor);
+                        DPRINTF(FlexLLC, "(%s) (Load: Address = %#x, Requestor = %s, State = %s) \n", machineID, in_msg.addr, in_msg.Requestor, getState(tbe, cache_entry, in_msg.addr));
                         trigger(Event:Load, in_msg.addr, cache_entry, tbe);
                     } else if (in_msg.Type == CoherenceRequestType:GetM) {
-                        DPRINTF(FlexLLC, "(%s) (Store: Address = %#x, Requestor = %s) \n", machineID, in_msg.addr, in_msg.Requestor);
+                        DPRINTF(FlexLLC, "(%s) (Store: Address = %#x, Requestor = %s, State = %s) \n", machineID, in_msg.addr, in_msg.Requestor, getState(tbe, cache_entry, in_msg.addr));
                         trigger(Event:Store, in_msg.addr, cache_entry, tbe);
                     } else {
                         error("Unexpected type from processor");
@@ -393,7 +393,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
               out_msg.Sender := machineID;
               out_msg.Acks := in_msg.Acks;
           }
-          DPRINTF(FlexLLC, "(%s) (SendPutS: Address = %#x, Sender = %s, Destination = %s) \n", machineID, address, machineID, in_msg.Requestor); 
+          DPRINTF(FlexLLC, "(%s) (SendCacheDataToReqAsM: Address = %#x, Sender = %s, Destination = %s) \n", machineID, address, machineID, in_msg.Requestor); 
       }
   }
 
@@ -856,7 +856,6 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   }
 
   transition(M, Replacement, MI_A) {
-      // sendInvToL0;
       tic;
       sendPutM;
   }

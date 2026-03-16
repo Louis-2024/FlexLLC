@@ -20,7 +20,7 @@ machine(MachineType:L0Cache, "LC-MSI cache")
     ISD_D, AccessPermission:Busy, desc="Invalid, moving to S, waiting for data";
     IMD_D, AccessPermission:Busy, desc="Invalid, moving to M, waiting for acks";
     SD, AccessPermission:Read_Only, desc="Shared. Read-only, other caches may have the block";
-    SDMD_D, AccessPermission:Read_Only, desc="";
+    SDMD_D, AccessPermission:Busy, desc="";
     MD, AccessPermission:Read_Write, desc="Modified. Read & write permissions. Owner of block";
 
     ISI_D, AccessPermission:Busy, desc="";

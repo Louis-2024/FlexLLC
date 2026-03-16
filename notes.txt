@@ -1,0 +1,140 @@
+
+
+
+157082000: system.caches.xyzCacheMemory: {Address = 0x43200} 
+157082000: system.caches.controllers8: LC-MSI-dir-ports.sm:34: GetS_NI: Address = 0x43200, Current State = I, Requestor = L1Cache-0 
+157082000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x43200, Sender = L1Cache-0] 
+157184000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x43200, Current State = I_to_S_await_mem_data_NI, Sender = Directory-0 
+157184000: system.caches.controllers8: LC-MSI-dir.sm:255: [SendMemDataToReq: Address = 0x43200, OriginalRequestor = L1Cache-0, Sender = Directory-0, Destination = L1Cache-0] 
+157197000: system.caches.controllers4: LC-MSI-cache.sm:224: (L1Cache-0) (DataDirNoAcks: Address = 0x43200, Sender = Directory-0) 
+157215000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x43240, Requestor = L0Cache-0) 
+157215000: system.caches.controllers4: LC-MSI-cache.sm:366: (L1Cache-0) (SendPutS: Address = 0x42240, Requestor = L1Cache-0, Destination = Directory-0) 
+157215000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x43240, Requestor = L0Cache-0) 
+157215000: system.caches.controllers4: LC-MSI-cache.sm:599: (L1Cache-0) ! stall: Stalled address = 0x43240, state = SI_A 
+157220000: system.caches.xyzCacheMemory: {Address = 0x42240, #Sharers = 1, #Owner = 0, isDirty = 0} 
+157220000: system.caches.controllers8: LC-MSI-dir-ports.sm:40: PutS_NI: Address = 0x42240, Current State = S_NI, Requestor = L1Cache-0 
+157220000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x42240, Sender = L1Cache-0] 
+157220000: system.caches.controllers8: LC-MSI-dir.sm:268: [SendPutAck: Address = 0x42240, Requestor = Directory-0, Destination = L1Cache-0] 
+157225000: system.caches.controllers4: LC-MSI-cache.sm:309: (L1Cache-0) (Load: Address = 0x43240, Requestor = L0Cache-0) 
+157225000: system.caches.controllers4: LC-MSI-cache.sm:340: (L1Cache-0) (SendGetS: Address = 0x43240, Requestor = L1Cache-0, Destination = Directory-0) 
+157322000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x42240, Current State = DirtyNI_await_mem_read_compare, Sender = Directory-0 
+157331000: system.caches.xyzCacheMemory: {Address = 0x43240} 
+157331000: system.caches.controllers8: LC-MSI-dir-ports.sm:34: GetS_NI: Address = 0x43240, Current State = I, Requestor = L1Cache-0 
+157331000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x43240, Sender = L1Cache-0] 
+157433000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x43240, Current State = I_to_S_await_mem_data_NI, Sender = Directory-0 
+157433000: system.caches.controllers8: LC-MSI-dir.sm:255: [SendMemDataToReq: Address = 0x43240, OriginalRequestor = L1Cache-0, Sender = Directory-0, Destination = L1Cache-0] 
+157446000: system.caches.controllers4: LC-MSI-cache.sm:224: (L1Cache-0) (DataDirNoAcks: Address = 0x43240, Sender = Directory-0) 
+157494000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x1c8c0, Requestor = L0Cache-0) 
+157494000: system.caches.controllers4: LC-MSI-cache.sm:366: (L1Cache-0) (SendPutS: Address = 0x200c0, Requestor = L1Cache-0, Destination = Directory-0) 
+157494000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x1c8c0, Requestor = L0Cache-0) 
+157494000: system.caches.controllers4: LC-MSI-cache.sm:599: (L1Cache-0) ! stall: Stalled address = 0x1c8c0, state = SI_A 
+
+200944000: system.caches.xyzCacheMemory: {Address = 0x1ba00} 
+200944000: system.caches.controllers8: LC-MSI-dir-ports.sm:34: GetS_NI: Address = 0x1ba00, Current State = I, Requestor = L1Cache-0 
+200944000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x1ba00, Sender = L1Cache-0] 
+201046000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x1ba00, Current State = I_to_S_await_mem_data_NI, Sender = Directory-0 
+201046000: system.caches.controllers8: LC-MSI-dir.sm:255: [SendMemDataToReq: Address = 0x1ba00, OriginalRequestor = L1Cache-0, Sender = Directory-0, Destination = L1Cache-0] 
+201059000: system.caches.controllers4: LC-MSI-cache.sm:224: (L1Cache-0) (DataDirNoAcks: Address = 0x1ba00, Sender = Directory-0) 
+201107000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x1ba40, Requestor = L0Cache-0) 
+201107000: system.caches.controllers4: LC-MSI-cache.sm:366: (L1Cache-0) (SendPutS: Address = 0x43240, Requestor = L1Cache-0, Destination = Directory-0) 
+201107000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x1ba40, Requestor = L0Cache-0) 
+201107000: system.caches.controllers4: LC-MSI-cache.sm:599: (L1Cache-0) ! stall: Stalled address = 0x1ba40, state = SI_A 
+
+201112000: system.caches.xyzCacheMemory: {Address = 0x43240, #Sharers = 1, #Owner = 0, isDirty = 0} 
+201112000: system.caches.controllers8: LC-MSI-dir-ports.sm:40: PutS_NI: Address = 0x43240, Current State = S_NI, Requestor = L1Cache-0 
+201112000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x43240, Sender = L1Cache-0] 
+201112000: system.caches.controllers8: LC-MSI-dir.sm:268: [SendPutAck: Address = 0x43240, Requestor = Directory-0, Destination = L1Cache-0] 
+201117000: system.caches.controllers4: LC-MSI-cache.sm:309: (L1Cache-0) (Load: Address = 0x1ba40, Requestor = L0Cache-0) 
+201117000: system.caches.controllers4: LC-MSI-cache.sm:340: (L1Cache-0) (SendGetS: Address = 0x1ba40, Requestor = L1Cache-0, Destination = Directory-0) 
+201214000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x43240, Current State = DirtyNI_await_mem_read_compare, Sender = Directory-0 
+
+247002000: system.caches.xyzCacheMemory: {Address = 0x43200} 
+247002000: system.caches.controllers8: LC-MSI-dir-ports.sm:34: GetS_NI: Address = 0x43200, Current State = I, Requestor = L1Cache-0 
+247002000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x43200, Sender = L1Cache-0] 
+247104000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x43200, Current State = I_to_S_await_mem_data_NI, Sender = Directory-0 
+247104000: system.caches.controllers8: LC-MSI-dir.sm:255: [SendMemDataToReq: Address = 0x43200, OriginalRequestor = L1Cache-0, Sender = Directory-0, Destination = L1Cache-0] 
+247117000: system.caches.controllers4: LC-MSI-cache.sm:224: (L1Cache-0) (DataDirNoAcks: Address = 0x43200, Sender = Directory-0) 
+247151000: system.caches.controllers4: LC-MSI-cache.sm:297: (L1Cache-0) (PutM: Address = 0x42440, Requestor = L0Cache-0) 
+247155000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x43240, Requestor = L0Cache-0) 
+247155000: system.caches.controllers4: LC-MSI-cache.sm:366: (L1Cache-0) (SendPutS: Address = 0x21240, Requestor = L1Cache-0, Destination = Directory-0) 
+247155000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x43240, Requestor = L0Cache-0) 
+247155000: system.caches.controllers4: LC-MSI-cache.sm:599: (L1Cache-0) ! stall: Stalled address = 0x43240, state = SI_A 
+
+247160000: system.caches.xyzCacheMemory: {Address = 0x21240, #Sharers = 1, #Owner = 0, isDirty = 0} 
+247160000: system.caches.controllers8: LC-MSI-dir-ports.sm:40: PutS_NI: Address = 0x21240, Current State = S_NI, Requestor = L1Cache-0 
+247160000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x21240, Sender = L1Cache-0] 
+247160000: system.caches.controllers8: LC-MSI-dir.sm:268: [SendPutAck: Address = 0x21240, Requestor = Directory-0, Destination = L1Cache-0] 
+247165000: system.caches.controllers4: LC-MSI-cache.sm:309: (L1Cache-0) (Load: Address = 0x43240, Requestor = L0Cache-0) 
+247165000: system.caches.controllers4: LC-MSI-cache.sm:340: (L1Cache-0) (SendGetS: Address = 0x43240, Requestor = L1Cache-0, Destination = Directory-0) 
+247262000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x21240, Current State = DirtyNI_await_mem_read_compare, Sender = Directory-0 
+
+201112000: system.caches.xyzCacheMemory: {Address = 0x43240, #Sharers = 1, #Owner = 0, isDirty = 0} 
+201112000: system.caches.controllers8: LC-MSI-dir-ports.sm:40: PutS_NI: Address = 0x43240, Current State = S_NI, Requestor = L1Cache-0 
+201112000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x43240, Sender = L1Cache-0] 
+201112000: system.caches.controllers8: LC-MSI-dir.sm:268: [SendPutAck: Address = 0x43240, Requestor = Directory-0, Destination = L1Cache-0] 
+201117000: system.caches.controllers4: LC-MSI-cache.sm:309: (L1Cache-0) (Load: Address = 0x1ba40, Requestor = L0Cache-0) 
+201117000: system.caches.controllers4: LC-MSI-cache.sm:340: (L1Cache-0) (SendGetS: Address = 0x1ba40, Requestor = L1Cache-0, Destination = Directory-0) 
+201214000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x43240, Current State = DirtyNI_await_mem_read_compare, Sender = Directory-0 
+
+247002000: system.caches.xyzCacheMemory: {Address = 0x43200} 
+247002000: system.caches.controllers8: LC-MSI-dir-ports.sm:34: GetS_NI: Address = 0x43200, Current State = I, Requestor = L1Cache-0 
+247002000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x43200, Sender = L1Cache-0] 
+247104000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x43200, Current State = I_to_S_await_mem_data_NI, Sender = Directory-0 
+247104000: system.caches.controllers8: LC-MSI-dir.sm:255: [SendMemDataToReq: Address = 0x43200, OriginalRequestor = L1Cache-0, Sender = Directory-0, Destination = L1Cache-0] 
+247117000: system.caches.controllers4: LC-MSI-cache.sm:224: (L1Cache-0) (DataDirNoAcks: Address = 0x43200, Sender = Directory-0) 
+247151000: system.caches.controllers4: LC-MSI-cache.sm:297: (L1Cache-0) (PutM: Address = 0x42440, Requestor = L0Cache-0) 
+247155000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x43240, Requestor = L0Cache-0) 
+247155000: system.caches.controllers4: LC-MSI-cache.sm:366: (L1Cache-0) (SendPutS: Address = 0x21240, Requestor = L1Cache-0, Destination = Directory-0) 
+247155000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x43240, Requestor = L0Cache-0) 
+247155000: system.caches.controllers4: LC-MSI-cache.sm:599: (L1Cache-0) ! stall: Stalled address = 0x43240, state = SI_A 
+
+247160000: system.caches.xyzCacheMemory: {Address = 0x21240, #Sharers = 1, #Owner = 0, isDirty = 0} 
+247160000: system.caches.controllers8: LC-MSI-dir-ports.sm:40: PutS_NI: Address = 0x21240, Current State = S_NI, Requestor = L1Cache-0 
+247160000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x21240, Sender = L1Cache-0] 
+247160000: system.caches.controllers8: LC-MSI-dir.sm:268: [SendPutAck: Address = 0x21240, Requestor = Directory-0, Destination = L1Cache-0] 
+247165000: system.caches.controllers4: LC-MSI-cache.sm:309: (L1Cache-0) (Load: Address = 0x43240, Requestor = L0Cache-0) 
+247165000: system.caches.controllers4: LC-MSI-cache.sm:340: (L1Cache-0) (SendGetS: Address = 0x43240, Requestor = L1Cache-0, Destination = Directory-0) 
+247262000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x21240, Current State = DirtyNI_await_mem_read_compare, Sender = Directory-0 
+
+247271000: system.caches.xyzCacheMemory: {Address = 0x43240} 
+247271000: system.caches.controllers8: LC-MSI-dir-ports.sm:34: GetS_NI: Address = 0x43240, Current State = I, Requestor = L1Cache-0 
+247271000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x43240, Sender = L1Cache-0] 
+247373000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x43240, Current State = I_to_S_await_mem_data_NI, Sender = Directory-0 
+247373000: system.caches.controllers8: LC-MSI-dir.sm:255: [SendMemDataToReq: Address = 0x43240, OriginalRequestor = L1Cache-0, Sender = Directory-0, Destination = L1Cache-0] 
+247386000: system.caches.controllers4: LC-MSI-cache.sm:224: (L1Cache-0) (DataDirNoAcks: Address = 0x43240, Sender = Directory-0) 
+247420000: system.caches.controllers4: LC-MSI-cache.sm:297: (L1Cache-0) (PutM: Address = 0x4a080, Requestor = L0Cache-0) 
+247424000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x43280, Requestor = L0Cache-0) 
+247424000: system.caches.controllers4: LC-MSI-cache.sm:381: (L1Cache-0) (SendPutM: Address = 0x4a280, Requestor = L1Cache-0, Destination = Directory-0) 
+247424000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x43280, Requestor = L0Cache-0) 
+247424000: system.caches.controllers4: LC-MSI-cache.sm:599: (L1Cache-0) ! stall: Stalled address = 0x43280, state = MI_A 
+
+268882000: system.caches.xyzCacheMemory: {Address = 0x45cc0} 
+268882000: system.caches.controllers8: LC-MSI-dir-ports.sm:37: GetM_NI: Address = 0x45cc0, Current State = I, Requestor = L1Cache-0 
+268882000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x45cc0, Sender = L1Cache-0] 
+268984000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x45cc0, Current State = I_to_M_await_mem_data_NI, Sender = Directory-0 
+268984000: system.caches.controllers8: LC-MSI-dir.sm:255: [SendMemDataToReq: Address = 0x45cc0, OriginalRequestor = L1Cache-0, Sender = Directory-0, Destination = L1Cache-0] 
+268997000: system.caches.controllers4: LC-MSI-cache.sm:224: (L1Cache-0) (DataDirNoAcks: Address = 0x45cc0, Sender = Directory-0) 
+269171000: system.caches.controllers4: LC-MSI-cache.sm:309: (L1Cache-0) (Load: Address = 0x43240, Requestor = L0Cache-0) 
+269287000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x45d00, Requestor = L0Cache-0) 
+269287000: system.caches.controllers4: LC-MSI-cache.sm:366: (L1Cache-0) (SendPutS: Address = 0x23500, Requestor = L1Cache-0, Destination = Directory-0) 
+269287000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x45d00, Requestor = L0Cache-0) 
+269287000: system.caches.controllers4: LC-MSI-cache.sm:599: (L1Cache-0) ! stall: Stalled address = 0x45d00, state = SI_A 
+
+362537000: system.caches.xyzCacheMemory: {Address = 0x261c0} 
+362537000: system.caches.controllers8: LC-MSI-dir-ports.sm:34: GetS_NI: Address = 0x261c0, Current State = I, Requestor = L1Cache-0 
+362537000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x261c0, Sender = L1Cache-0] 
+362639000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x261c0, Current State = I_to_S_await_mem_data_NI, Sender = Directory-0 
+362639000: system.caches.controllers8: LC-MSI-dir.sm:255: [SendMemDataToReq: Address = 0x261c0, OriginalRequestor = L1Cache-0, Sender = Directory-0, Destination = L1Cache-0] 
+362652000: system.caches.controllers4: LC-MSI-cache.sm:224: (L1Cache-0) (DataDirNoAcks: Address = 0x261c0, Sender = Directory-0) 
+362670000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x26240, Requestor = L0Cache-0) 
+362670000: system.caches.controllers4: LC-MSI-cache.sm:366: (L1Cache-0) (SendPutS: Address = 0x43240, Requestor = L1Cache-0, Destination = Directory-0) 
+362670000: system.caches.controllers4: LC-MSI-cache.sm:305: (L1Cache-0) (Replacement: Address = 0x26240, Requestor = L0Cache-0) 
+362670000: system.caches.controllers4: LC-MSI-cache.sm:599: (L1Cache-0) ! stall: Stalled address = 0x26240, state = SI_A 
+
+362675000: system.caches.xyzCacheMemory: {Address = 0x43240, #Sharers = 1, #Owner = 0, isDirty = 0} 
+362675000: system.caches.controllers8: LC-MSI-dir-ports.sm:40: PutS_NI: Address = 0x43240, Current State = S_NI, Requestor = L1Cache-0 
+362675000: system.caches.controllers8: LC-MSI-dir.sm:184: [SendMemRead: Address = 0x43240, Sender = L1Cache-0] 
+362675000: system.caches.controllers8: LC-MSI-dir.sm:268: [SendPutAck: Address = 0x43240, Requestor = Directory-0, Destination = L1Cache-0] 
+362680000: system.caches.controllers4: LC-MSI-cache.sm:309: (L1Cache-0) (Load: Address = 0x26240, Requestor = L0Cache-0) 
+362680000: system.caches.controllers4: LC-MSI-cache.sm:340: (L1Cache-0) (SendGetS: Address = 0x26240, Requestor = L1Cache-0, Destination = Directory-0) 
+362777000: system.caches.controllers8: LC-MSI-dir-ports.sm:12: MemData: Address = 0x43240, Current State = DirtyNI_await_mem_read_compare, Sender = Directory-0 
