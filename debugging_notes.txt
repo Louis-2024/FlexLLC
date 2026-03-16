@@ -1,0 +1,28 @@
+Symptom: 
+When running the Cholesky benchmark, it keeps running forever without termination, and without triggering deadlock alarm (live lock scenario)
+
+Observations:
+In the live lock scenario, it runs infinitely number of instructions, and all requests are fulfilled without timeout
+So, I suspect it's either a problem of (1) wrong instructions being fetched to the CPU, causing the infinite execution,
+or (2) errors with updating memory data, which causes the execution being trapped in infinite looping
+
+Also, in the live lock scenario, the Cholesky benchmark was executed with core0 (L0-0 and L1-0) only.
+So, the live lock issue can actually be triggered by single-core execution.
+Hence, we can exclude the possibility that it's due to forwarding / invalidations.
+
+Debugging notes:
+[Experiment 1] 
+First, I tried to force L1 cache to fetch every line in M state, no matter it's for reading or writing.
+Then, the live lock issue is gone. So, the live lock error is associated with lines in S state.
+
+[Experiment 2] 
+Second, I disabled the LLC, and tried to force L1 cache to write every S lines evicted from L1 cache to memory, no matter if it's dirty or not.
+Then, the live lock issue is gone. So, the live lock error is associated with the writeback of lines in S state.
+
+[Experiment 3]
+Third, I disabled the LLC, and whenever a clean S line gets evicted from L1 cache, I fetched its copy from memory, and check if its data from memory == data in cache.
+Then, in the 882nd execution of evicting clean S lines from L1, I detected a case where the memory data != cache data for a line supposed to be clean.
+I checked the call tree in L1 and L0, and confirmed that the CPU didn't perform any Store() operation on that line, so it should be clean.
+So, it's either (1) data of that line (supposed to be clean) had been modified by the cache in an unexpected way,
+or (2) the cache holds the correct copy of the data of that line, but the memory copy of that line got corrupted for some reasons.
+I tend to agree with (2), because forcing writing back all lines prevented the live lock in experiment 2.

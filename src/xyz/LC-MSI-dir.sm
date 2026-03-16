@@ -362,7 +362,7 @@ MessageBuffer *responseFromMemory;
                     out_msg.Acks := 0;
                 }
             }
-            DPRINTF(FlexLLC, "[SendMemDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.OriginalRequestorMachId, machineID, in_msg.OriginalRequestorMachId);
+            DPRINTF(FlexLLC, "[SendMemDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s, Data = %s] \n", address, in_msg.OriginalRequestorMachId, machineID, in_msg.OriginalRequestorMachId, in_msg.DataBlk);
         }
     }
 
