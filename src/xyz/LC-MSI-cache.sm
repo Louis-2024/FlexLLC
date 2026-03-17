@@ -45,16 +45,16 @@ machine(MachineType:L1Cache, "LC-MSI cache")
 
     M,      AccessPermission:Read_Write,
                 desc="Modified. Read & write permissions. Owner of block";
-    M_P,      AccessPermission:Busy,
+    M_P,      AccessPermission:Maybe_Stale,
                 desc="Privately cached";
     MP_D,      AccessPermission:Busy,
                 desc="Privately cached, Inv sent, waiting for data";
     // States moving to Invalid
-    MI_A,   AccessPermission:Read_Only,
+    MI_A,   AccessPermission:Busy,
                 desc="Was modified, moving to I, waiting for put ack";
-    SI_A,   AccessPermission:Read_Only,
+    SI_A,   AccessPermission:Busy,
                 desc="Was shared, moving to I, waiting for put ack";
-    II_A,   AccessPermission:Invalid,
+    II_A,   AccessPermission:Busy,
                 desc="Sent valid data before receiving put ack. ";
                 // "Waiting for put ack.";
   }
@@ -782,7 +782,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     kd_wakeUpDependents;
   }
 
-  transition({SM_AD, IM_AD}, OwnerDataNoAcks, M_P) {
+  transition(IM_AD, OwnerDataNoAcks, M_P) {
       toc;
       writeDataToCache;
       deallocateTBE;
@@ -797,7 +797,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       popResponseQueue;
   }
 
-  transition({IM_AD, SM_AD}, DataDirNoAcks, M_P) {
+  transition(IM_AD, DataDirNoAcks, M_P) {
       toc;
       writeDataToCache;
       deallocateTBE;
