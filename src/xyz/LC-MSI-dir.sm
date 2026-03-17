@@ -525,6 +525,20 @@ MessageBuffer *responseFromMemory;
     action(xyzDeallocateMetadataNI, desc="") {
         xyzCacheMemory.removeLineFromNIDirectory(address);
     }
+    
+    // stats actions
+
+    action(xyzIncrementINFetchCount, desc="") {
+        xyzCacheMemory.incrementINFetchCount();
+    }
+
+    action(xyzIncrementNIFetchCount, desc="") {
+        xyzCacheMemory.incrementNIFetchCount();
+    }
+
+    action(xyzIncrementINConversionCount, desc="") {
+        xyzCacheMemory.incrementINConversionCount();
+    }
 
     // transitions
 

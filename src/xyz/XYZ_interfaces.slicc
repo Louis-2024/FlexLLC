@@ -63,4 +63,9 @@ structure (XYZCacheMemory, external = "yes") {
     void setNITransientState(Addr, int);
     void removeLineFromNIDirectory(Addr);
     void convertNILineToIN(Addr);
+
+    void checkNewEpoch();
+    void incrementINFetchCount();
+    void incrementNIFetchCount();
+    void incrementINConversionCount();
 }

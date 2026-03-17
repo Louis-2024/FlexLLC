@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "debug/FlexLLC.hh"
+#include "debug/FlexLLC_Stats.hh"
 #include "mem/ruby/structures/CacheMemory.hh"
 #include "mem/ruby/common/MachineID.hh"
 #include "mem/ruby/common/NetDest.hh"
@@ -367,9 +368,52 @@ public:
         return getLRULine(getLLCOnlyDirtyLinesPerSet(address));
     }
 
+    // stats functions
+
+    void checkNewEpoch() {
+        if ((int) (curTick() / tickPerEpoch) > epochCount) {
+            printEpochStats();
+        }
+    }
+
+    void incrementINFetchCount() {
+        INFetches++;
+    }
+
+    void incrementNIFetchCount() {
+        NIFetches++;
+    }
+
+    void incrementINConversionCount() {
+        INConvertions++;
+    }
+
+    void printEpochStats() {
+        DPRINTF(FlexLLC_Stats, "==========[Epoch: %d]========== \n", epochCount);
+        assert(INFetches + NIFetches > 0);
+        
+        DPRINTF(FlexLLC_Stats, "Number of IN lines: %d \n", getCacheLineCount(true));
+        DPRINTF(FlexLLC_Stats, "Number of NI lines: %d \n", getCacheLineCount(false));
+        DPRINTF(FlexLLC_Stats, "Number of IN fetches: %d \n", INFetches);
+        DPRINTF(FlexLLC_Stats, "Number of NI fetches: %d \n", NIFetches);
+        DPRINTF(FlexLLC_Stats, "Number of IN conversions: %d \n", INConvertions);
+
+        epochCount++;
+        INFetches = 0;
+        NIFetches = 0;
+        INConvertions = 0;
+    }
+
 protected:
     std::vector<MetadataPerSet> LLC_directory;
     std::vector<MetadataPerSet> NI_directory;
+
+    int epochCount = 0;
+    Tick tickPerEpoch = 10000000000;
+
+    int INFetches = 0;
+    int NIFetches = 0;
+    int INConvertions = 0;
 };
 
 }  // namespace ruby
