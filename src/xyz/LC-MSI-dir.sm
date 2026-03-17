@@ -29,12 +29,12 @@ MessageBuffer *responseFromMemory;
 {
     state_declaration(State, desc="Directory states", default="Directory_State_I") {
         I, AccessPermission:Read_Write, desc="";
-        M_NI, AccessPermission:Invalid, desc="";
-        S_NI, AccessPermission:Invalid, desc="";
-        I_to_S_await_mem_data_NI, AccessPermission:Invalid, desc="";
-        I_to_M_await_mem_data_NI, AccessPermission:Invalid, desc="";
-        DirtyNI_to_I_await_ack, AccessPermission:Invalid, desc="";
-        DirtyNI_await_mem_read_compare, AccessPermission:Invalid, desc="Awaiting mem read to compare cache vs memory";
+        M_NI, AccessPermission:Maybe_Stale, desc="";
+        S_NI, AccessPermission:Maybe_Stale, desc="";
+        I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
+        I_to_M_await_mem_data_NI, AccessPermission:Busy, desc="";
+        DirtyNI_to_I_await_ack, AccessPermission:Busy, desc="";
+        DirtyNI_await_mem_read_compare, AccessPermission:Busy, desc="Awaiting mem read to compare cache vs memory";
     }
 
     enumeration(Event, desc="Directory events") {
@@ -147,8 +147,10 @@ MessageBuffer *responseFromMemory;
         Entry e := getCacheEntry(addr);
         if(is_valid(e)) {
             testAndRead(addr, e.DataBlk, pkt);
+            DPRINTF(FlexLLC, "(%s) (functionalRead: Address = %#x, Data = %s, State = %s) \n", machineID, addr, e.DataBlk, e.DirState);
         } else {
             functionalMemoryRead(pkt);
+            DPRINTF(FlexLLC, "(%s) (functionalMemoryRead: Address = %#x) \n", machineID, addr);
         }
     }
 
@@ -157,6 +159,7 @@ MessageBuffer *responseFromMemory;
         int num_functional_writes := 0;
         if(is_valid(e)) {
             num_functional_writes := num_functional_writes + testAndWrite(addr, e.DataBlk, pkt);
+            DPRINTF(FlexLLC, "(%s) (functionalWrite: Address = %#x, Data = %s, State = %s) \n", machineID, addr, e.DataBlk, e.DirState);
             if(functionalMemoryWrite(pkt)) {
                 num_functional_writes := num_functional_writes + 1;
             }
@@ -164,6 +167,7 @@ MessageBuffer *responseFromMemory;
         }  
         if (functionalMemoryWrite(pkt)) {
             num_functional_writes := num_functional_writes + 1;
+            DPRINTF(FlexLLC, "(%s) (functionalMemoryWrite: Address = %#x) \n", machineID, addr);
         }
         return num_functional_writes;
     }
@@ -237,7 +241,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.OriginalRequestor := in_msg.Requestor;
                 xyzCacheMemory.setMRU(cache_entry);
             }
-            DPRINTF(FlexLLC, "[SendLLCDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.Requestor, machineID, in_msg.Requestor);
+            DPRINTF(FlexLLC, "[SendLLCDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s, Data = %s] \n", address, in_msg.Requestor, machineID, in_msg.Requestor, in_msg.DataBlk);
         }
     }
 
@@ -252,7 +256,7 @@ MessageBuffer *responseFromMemory;
                 out_msg.MessageSize := MessageSizeType:Data;
                 out_msg.OriginalRequestor := in_msg.OriginalRequestorMachId;
             }
-            DPRINTF(FlexLLC, "[SendMemDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s] \n", address, in_msg.OriginalRequestorMachId, machineID, in_msg.OriginalRequestorMachId);
+            DPRINTF(FlexLLC, "[SendMemDataToReq: Address = %#x, OriginalRequestor = %s, Sender = %s, Destination = %s, Data = %s] \n", address, in_msg.OriginalRequestorMachId, machineID, in_msg.OriginalRequestorMachId, in_msg.DataBlk);
         }
     }
 
@@ -379,6 +383,8 @@ MessageBuffer *responseFromMemory;
 
     action(checkDataBlkMatch, desc="Assert cache (TBE) DataBlk equals memory DataBlk") {
         peek(memQueue_in, MemoryMsg) {
+            DPRINTF(FlexLLC, "[CheckDataBlkMatch: Address = %#x, MemData = %s] \n", address, in_msg.DataBlk);
+            DPRINTF(FlexLLC, "[CheckDataBlkMatch: Address = %#x, CacheData = %s] \n", address, tbe.DataBlk);
             assert(tbe.DataBlk == in_msg.DataBlk);
         }
     }

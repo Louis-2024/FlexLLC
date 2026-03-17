@@ -45,7 +45,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
 
     M,      AccessPermission:Read_Write,
                 desc="Modified. Read & write permissions. Owner of block";
-    M_P,      AccessPermission:Invalid,
+    M_P,      AccessPermission:Maybe_Stale,
                 desc="Privately cached";
     MP_D,      AccessPermission:Busy,
                 desc="Privately cached, Inv sent, waiting for data";
@@ -171,8 +171,10 @@ machine(MachineType:L1Cache, "LC-MSI cache")
       TBE tbe := TBEs[addr];
       if(is_valid(tbe)) {
           testAndRead(addr, tbe.DataBlk, pkt);
+          DPRINTF(FlexLLC, "(%s) (functionalRead: Address = %#x, Data = %s, State = %s) \n", machineID, addr, tbe.DataBlk, getState(tbe, getCacheEntry(addr), addr)); 
       } else {
           testAndRead(addr, getCacheEntry(addr).DataBlk, pkt);
+          DPRINTF(FlexLLC, "(%s) (functionalRead: Address = %#x, Data = %s, State = %s) \n", machineID, addr, getCacheEntry(addr).DataBlk, getState(tbe, getCacheEntry(addr), addr)); 
       }
   }
 
@@ -181,13 +183,13 @@ machine(MachineType:L1Cache, "LC-MSI cache")
 
       TBE tbe := TBEs[addr];
       if(is_valid(tbe)) {
-          num_functional_writes := num_functional_writes +
-              testAndWrite(addr, tbe.DataBlk, pkt);
+          num_functional_writes := num_functional_writes + testAndWrite(addr, tbe.DataBlk, pkt);
+          DPRINTF(FlexLLC, "(%s) (functionalWrite: Address = %#x, Data = %s, State = %s) \n", machineID, addr, tbe.DataBlk, getState(tbe, getCacheEntry(addr), addr)); 
           return num_functional_writes;
       }
 
-      num_functional_writes := num_functional_writes +
-              testAndWrite(addr, getCacheEntry(addr).DataBlk, pkt);
+      num_functional_writes := num_functional_writes + testAndWrite(addr, getCacheEntry(addr).DataBlk, pkt);
+      DPRINTF(FlexLLC, "(%s) (functionalWrite: Address = %#x, Data = %s, State = %s) \n", machineID, addr, getCacheEntry(addr).DataBlk, getState(tbe, getCacheEntry(addr), addr));
       return num_functional_writes;
   }
 
@@ -363,7 +365,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
         out_msg.is_reordered := false;
         out_msg.isWritebackRequest := true;
       }
-     DPRINTF(FlexLLC, "(%s) (SendPutS: Address = %#x, Requestor = %s, Destination = %s) \n", machineID, address, machineID, mapAddressToMachine(address, MachineType:Directory)); 
+     DPRINTF(FlexLLC, "(%s) (SendPutS: Address = %#x, Requestor = %s, Destination = %s, Data = %s) \n", machineID, address, machineID, mapAddressToMachine(address, MachineType:Directory), cache_entry.DataBlk); 
   }
 
   action(sendPutM, "pM", desc="Send putM+data to the directory") {
@@ -378,7 +380,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
           out_msg.is_reordered := false;
           out_msg.isWritebackRequest := true;
       }
-      DPRINTF(FlexLLC, "(%s) (SendPutM: Address = %#x, Requestor = %s, Destination = %s) \n", machineID, address, machineID, mapAddressToMachine(address, MachineType:Directory)); 
+      DPRINTF(FlexLLC, "(%s) (SendPutM: Address = %#x, Requestor = %s, Destination = %s, Data = %s) \n", machineID, address, machineID, mapAddressToMachine(address, MachineType:Directory), cache_entry.DataBlk); 
   }
 
   action(sendCacheDataToReqAsM, desc="") {
@@ -393,7 +395,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
               out_msg.Sender := machineID;
               out_msg.Acks := in_msg.Acks;
           }
-          DPRINTF(FlexLLC, "(%s) (SendCacheDataToReqAsM: Address = %#x, Sender = %s, Destination = %s) \n", machineID, address, machineID, in_msg.Requestor); 
+          DPRINTF(FlexLLC, "(%s) (SendCacheDataToReqAsM: Address = %#x, Sender = %s, Destination = %s, Data = %s) \n", machineID, address, machineID, in_msg.Requestor, cache_entry.DataBlk); 
       }
   }
 
@@ -408,7 +410,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
               out_msg.MessageSize := MessageSizeType:Data;
               out_msg.Sender := machineID;
           }
-          DPRINTF(FlexLLC, "(%s) (SendCacheDataToReqAsS: Address = %#x, Sender = %s, Destination = %s) \n", machineID, address, machineID, in_msg.Requestor); 
+          DPRINTF(FlexLLC, "(%s) (SendCacheDataToReqAsS: Address = %#x, Sender = %s, Destination = %s, Data = %s) \n", machineID, address, machineID, in_msg.Requestor, cache_entry.DataBlk); 
       }
   }
 
@@ -532,27 +534,20 @@ machine(MachineType:L1Cache, "LC-MSI cache")
     peek(response_in, ResponseMsg) {
         assert(is_valid(cache_entry));
         cache_entry.DataBlk := in_msg.DataBlk;
+        DPRINTF(FlexLLC, "(%s) (WriteDataToCache: Address = %#x, Data = %s) \n", machineID, address, in_msg.DataBlk); 
     }
   }
 
   action(writebackPutDataToCache, "wbd", desc="Write data from Private cache") {
     peek(requestFromL0_in, RequestMsg) {
         cache_entry.DataBlk := in_msg.DataBlk;
+        DPRINTF(FlexLLC, "(%s) (WritePutDataToCache: Address = %#x, Data = %s) \n", machineID, address, in_msg.DataBlk); 
     }
   }
   action(writebackRespDataToCache, "wbrd", desc="Write data from Private cache") {
     peek(responseFromL0_in, ResponseMsg) {
         cache_entry.DataBlk := in_msg.DataBlk;
-    }
-  }
-  action(writebackPutDataToTBE, "wbdt", desc="Write data from Private cache") {
-    peek(requestFromL0_in, RequestMsg) {
-        tbe.DataBlk := in_msg.DataBlk;
-    }
-  }
-  action(writebackRespDataToTBE, "wbrdt", desc="Write data from Private cache") {
-    peek(responseFromL0_in, ResponseMsg) {
-        tbe.DataBlk := in_msg.DataBlk;
+        DPRINTF(FlexLLC, "(%s) (WriteRespDataToCache: Address = %#x, Data = %s) \n", machineID, address, in_msg.DataBlk); 
     }
   }
 
