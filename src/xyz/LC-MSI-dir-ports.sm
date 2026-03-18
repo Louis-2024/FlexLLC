@@ -115,6 +115,7 @@
                                 // evict NI
                                 if (xyzCacheMemory.getIsDirty(in_msg.addr)) {
                                     if (xyzCacheMemory.getSharers(in_msg.addr).count() > 1) {
+                                        /*
                                         if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                             DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_InsertToLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                             xyzCacheMemory.incrementINConversionCount();
@@ -129,6 +130,9 @@
                                             DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                             trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
                                         }
+                                        */
+                                        DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                                        trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
                                     } else if (xyzCacheMemory.getSharers(in_msg.addr).count() == 1) {
                                         if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                             DPRINTF(FlexLLC, "PutS_LastCopy_Dirty_NI_InsertToLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
@@ -149,6 +153,7 @@
                                     }
                                 } else {
                                     if (xyzCacheMemory.getSharers(in_msg.addr).count() > 1) {
+                                        /*
                                         if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                             DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_InsertToLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                             xyzCacheMemory.incrementINConversionCount();
@@ -163,6 +168,9 @@
                                             DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                             trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
                                         }
+                                        */
+                                        DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
+                                        trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
                                     } else if (xyzCacheMemory.getSharers(in_msg.addr).count() == 1) {
                                         if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                             DPRINTF(FlexLLC, "PutS_LastCopy_Clean_NI_InsertToLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);

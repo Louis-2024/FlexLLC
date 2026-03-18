@@ -390,8 +390,6 @@ public:
 
     void printEpochStats() {
         DPRINTF(FlexLLC_Stats, "==========[Epoch: %d]========== \n", epochCount);
-        assert(INFetches + NIFetches > 0);
-        
         DPRINTF(FlexLLC_Stats, "Number of IN lines: %d \n", getCacheLineCount(true));
         DPRINTF(FlexLLC_Stats, "Number of NI lines: %d \n", getCacheLineCount(false));
         DPRINTF(FlexLLC_Stats, "Number of IN fetches: %d \n", INFetches);
