@@ -16,24 +16,13 @@ namespace gem5::ruby {
     public:
         XYZStatsObject(const XYZStatsObjectParams &p);
 
-
         gem5::statistics::Distribution latencies;
-        gem5::statistics::Scalar total_repl;
-        gem5::statistics::Scalar total_repl_shared;
-        gem5::statistics::Scalar total_repl_owned;
-        gem5::statistics::Scalar total_repl_llc;
-        gem5::statistics::Scalar total_put;
-        gem5::statistics::Scalar total_putm;
-        gem5::statistics::Scalar total_puts;
-        gem5::statistics::Scalar total_put_as_wt;
-        gem5::statistics::Scalar total_puts_as_wt;
-        gem5::statistics::Scalar total_putm_as_wt;
-        gem5::statistics::Formula wt_putRatio;
-        gem5::statistics::Formula wt_putsRatio;
-        gem5::statistics::Formula wt_putmRatio;
+        gem5::statistics::Scalar l0_hits;
+        gem5::statistics::Scalar l1_hits;
+        gem5::statistics::Scalar llc_hits;
+        gem5::statistics::Scalar mem_hits;
 
         Cycles w;
-
         uint64_t wcl_bound;
 
         void tic(Addr address) {
@@ -51,35 +40,23 @@ namespace gem5::ruby {
             }
         }
 
-        void regStats() override;        
-        void recordReplShared() {
-            total_repl++;
-            total_repl_shared++;
+        void regStats() override;       
+        
+        void recordL0Hits() {
+            l0_hits++;
         }
-        void recordReplOwned() {
-            total_repl++;
-            total_repl_owned++;
+
+        void recordL1Hits() {
+            l1_hits++;
         }
-        void recordReplLLC() {
-            total_repl++;
-            total_repl_llc++;
+
+        void recordLLCHits() {
+            llc_hits++;
         }
-        // void recordPutM(bool is_write_through) {
-        //     total_put++;
-        //     total_putm++;
-        //     if(is_write_through) {
-        //         total_putm_as_wt++;
-        //         total_put_as_wt++;
-        //     }
-        // };
-        // void recordPutS(bool is_write_through) {
-        //     total_put++;
-        //     total_puts++;
-        //     if(is_write_through) {
-        //         total_puts_as_wt++;
-        //         total_put_as_wt++;
-        //     }
-        // };
+
+        void recordMemHits() {
+            mem_hits++;
+        }
     };
 };
 

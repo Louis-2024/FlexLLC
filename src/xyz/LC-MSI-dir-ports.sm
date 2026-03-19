@@ -37,12 +37,15 @@
                 } else {
                     if(in_msg.Type == CoherenceRequestType:GetS) {
                         if (xyzCacheMemory.containLLCLine(in_msg.addr)) {
+                            xyzStatsObject.recordLLCHits();
                             DPRINTF(FlexLLC, "GetS: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:GetS, in_msg.addr, e, tbe);
                         } else if (xyzCacheMemory.containNILine(in_msg.addr)) {
+                            xyzStatsObject.recordLLCHits();
                             DPRINTF(FlexLLC, "GetS_NI: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                             trigger(Event:GetS_NI, in_msg.addr, e, tbe);
                         } else {
+                            xyzStatsObject.recordMemHits();
                             if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                 DPRINTF(FlexLLC, "GetS: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                 xyzCacheMemory.incrementINFetchCount();
@@ -55,6 +58,7 @@
                         }
                     } else if (in_msg.Type == CoherenceRequestType:GetM) {
                         if (xyzCacheMemory.containLLCLine(in_msg.addr)) {
+                            xyzStatsObject.recordLLCHits();
                             if (xyzCacheMemory.getSharers(in_msg.addr).isElement(in_msg.Requestor)) {
                                 // scenario where requestor holds target line in S, and wants to upgrade to M
                                 DPRINTF(FlexLLC, "GetM_From_Sharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
@@ -64,6 +68,7 @@
                                 trigger(Event:GetM_From_NonSharer, in_msg.addr, e, tbe);
                             }
                         } else if (xyzCacheMemory.containNILine(in_msg.addr)) {
+                            xyzStatsObject.recordLLCHits();
                             if (xyzCacheMemory.getSharers(in_msg.addr).isElement(in_msg.Requestor)) {
                                 // scenario where requestor holds target line in S, and wants to upgrade to M
                                 DPRINTF(FlexLLC, "GetM_NI_From_Sharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
@@ -73,6 +78,7 @@
                                 trigger(Event:GetM_NI_From_NonSharer, in_msg.addr, e, tbe);
                             }
                         } else {
+                            xyzStatsObject.recordMemHits();
                             if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                 DPRINTF(FlexLLC, "GetM_From_NonSharer: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                 xyzCacheMemory.incrementINFetchCount();
@@ -115,7 +121,6 @@
                                 // evict NI
                                 if (xyzCacheMemory.getIsDirty(in_msg.addr)) {
                                     if (xyzCacheMemory.getSharers(in_msg.addr).count() > 1) {
-                                        /*
                                         if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                             DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_InsertToLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                             xyzCacheMemory.incrementINConversionCount();
@@ -130,9 +135,6 @@
                                             DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                             trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
                                         }
-                                        */
-                                        DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                                        trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
                                     } else if (xyzCacheMemory.getSharers(in_msg.addr).count() == 1) {
                                         if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                             DPRINTF(FlexLLC, "PutS_LastCopy_Dirty_NI_InsertToLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
@@ -153,7 +155,6 @@
                                     }
                                 } else {
                                     if (xyzCacheMemory.getSharers(in_msg.addr).count() > 1) {
-                                        /*
                                         if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                             DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_InsertToLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                             xyzCacheMemory.incrementINConversionCount();
@@ -168,9 +169,6 @@
                                             DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
                                             trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
                                         }
-                                        */
-                                        DPRINTF(FlexLLC, "PutS_NotLastCopy_NI_BypassLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);
-                                        trigger(Event:PutS_NotLastCopy_NI_BypassLLC, in_msg.addr, e, tbe);
                                     } else if (xyzCacheMemory.getSharers(in_msg.addr).count() == 1) {
                                         if (xyzCacheMemory.existVacancyPerSet(in_msg.addr) || xyzCacheMemory.existLLCOnlyCleanLinePerSet(in_msg.addr)) {
                                             DPRINTF(FlexLLC, "PutS_LastCopy_Clean_NI_InsertToLLC: Address = %#x, Current State = %s, Requestor = %s \n", in_msg.addr, getState(tbe, e, in_msg.addr), in_msg.Requestor);

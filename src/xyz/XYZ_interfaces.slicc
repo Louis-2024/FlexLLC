@@ -8,14 +8,12 @@ structure (TDMSwitch, external = "yes") {
 }
 
 structure (XYZStatsObject, external = "yes") {
-    // void recordPutS(bool);
-    // void recordPutM(bool);
-
-    void recordReplShared();
-    void recordReplOwned();
-    void recordReplLLC();
     void tic(Addr);
     void toc(Addr);
+    void recordL0Hits();
+    void recordL1Hits();
+    void recordLLCHits();
+    void recordMemHits();
 }
 
 structure (XYZCacheMemory, external = "yes") {

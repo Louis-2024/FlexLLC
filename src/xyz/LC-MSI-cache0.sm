@@ -338,6 +338,8 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
 
   action(loadHit_D, desc="") {
+    xyzStatsObject.recordL0Hits();
+
     assert(is_valid(cache_entry));
     DCache.setMRU(cache_entry);
     DPRINTF(RubySlicc, "%#x: cache_entry.DataBlk: %s\n", address, cache_entry.DataBlk);
@@ -345,6 +347,8 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
 
   action(loadHit_I, desc="") {
+    xyzStatsObject.recordL0Hits();
+
     assert(is_valid(cache_entry));
     ICache.setMRU(cache_entry);
     DPRINTF(RubySlicc, "%#x: cache_entry.DataBlk: %s\n", address, cache_entry.DataBlk);
@@ -370,6 +374,8 @@ machine(MachineType:L0Cache, "LC-MSI cache")
   }
 
   action(storeHit, desc="") {
+    xyzStatsObject.recordL0Hits();
+    
     assert(is_valid(cache_entry));
     assert(!ICache.isTagPresent(address));
     DCache.setMRU(cache_entry);

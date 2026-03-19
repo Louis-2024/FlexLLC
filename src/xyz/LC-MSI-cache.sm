@@ -462,6 +462,8 @@ machine(MachineType:L1Cache, "LC-MSI cache")
   }
 
   action(loadHit, "Lh", desc="Load hit") {
+    xyzStatsObject.recordL1Hits();
+
     assert(is_valid(cache_entry));
     cacheMemory.setMRU(cache_entry);
     enqueue(responseToL0_out, ResponseMsg, 1) {
@@ -472,7 +474,10 @@ machine(MachineType:L1Cache, "LC-MSI cache")
         out_msg.MessageSize := MessageSizeType:Data;
     }
   }
+
   action(loadHitM, "Lhm", desc="Load hit") {
+    xyzStatsObject.recordL1Hits();
+
     assert(is_valid(cache_entry));
     cacheMemory.setMRU(cache_entry);
     enqueue(responseToL0_out, ResponseMsg, 1) {
@@ -483,6 +488,7 @@ machine(MachineType:L1Cache, "LC-MSI cache")
         out_msg.MessageSize := MessageSizeType:Data;
     }
   }
+
   action(externalLoadHitM, "xLhM", desc="External load hit (was a miss), and the data may be from the bus") {
     // we won't be reading anything from the response bus
     assert(is_valid(cache_entry));
@@ -506,7 +512,10 @@ machine(MachineType:L1Cache, "LC-MSI cache")
         out_msg.MessageSize := MessageSizeType:Data;
     }
   }
+
   action(storeHit, "Sh", desc="Store hit") {
+    xyzStatsObject.recordL1Hits();
+    
     assert(is_valid(cache_entry));
     cacheMemory.setMRU(cache_entry);
     enqueue(responseToL0_out, ResponseMsg, 1) {
