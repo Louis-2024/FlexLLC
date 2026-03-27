@@ -41,7 +41,6 @@ MessageBuffer *responseFromMemory;
         // transient states
         I_to_S_await_mem_data, AccessPermission:Busy, desc="";
         I_to_M_await_mem_data, AccessPermission:Busy, desc="";
-        LOD_to_LOC_await_ack, AccessPermission:Read_Only, desc="";
         LOD_to_LOC_await_ack_await_allocation, AccessPermission:Read_Only, desc="";
 
         I_to_S_await_mem_data_NI, AccessPermission:Busy, desc="";
@@ -558,17 +557,6 @@ MessageBuffer *responseFromMemory;
     transition(LOD_to_LOC_await_ack_await_allocation, MemAck, LOC) {
         popMemQueue;
         wakeUpBuffers;
-    }
-
-    transition(LOD, PutLOD, LOD_to_LOC_await_ack) {
-        sendLLCDataToMem;
-        xyzUnsetIsDirty;
-    }
-
-    transition(LOD_to_LOC_await_ack, MemAck, LOC) {
-        popMemQueue;
-        wakeUpBuffers;
-        markLLCDone;
     }
 
     transition({LOC, LOD}, GetS, S) {

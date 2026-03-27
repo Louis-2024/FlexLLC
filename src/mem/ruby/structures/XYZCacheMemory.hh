@@ -330,7 +330,7 @@ public:
 
     Addr getLRULine(std::unordered_set<Addr> lines) {
         assert(lines.size() > 0);
-        Tick LRU_time = curTick();
+        Tick LRU_time = MaxTick;
         Addr LRU_line = 0;
         
         for (const Addr& address : lines) {
@@ -342,6 +342,7 @@ public:
                 LRU_line = address;
             }
         }
+        assert(LRU_line > 0);
         return LRU_line;
     }
 
